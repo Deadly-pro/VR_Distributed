@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome</title>
+</head>
+<body>
+    <h1>Hello, World!</h1>
+    {{ request.user.is_authenticated }}
+    <p>This is a basic HTML page.</p>
+    <a href="{% url 'socket_test:stream' %}">Go to Video Stream</a>
+</body>
+</html>

@@ -1,0 +1,91 @@
+
+{% load static %}
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Secure Video Stream</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsencrypt/3.3.2/jsencrypt.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #111;
+        color: #eee;
+        margin: 0;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 20px auto;
+        padding: 20px;
+        background: #222;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+      }
+      canvas {
+        display: block;
+        margin: 20px auto;
+        background: black;
+        border: 2px solid #555;
+      }
+      .controls,
+      .quality-control {
+        text-align: center;
+        margin: 10px 0;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        background: #007bff;
+        color: white;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #666;
+      }
+      .status {
+        text-align: center;
+        margin: 10px 0;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .status.connected {
+        background: #155724;
+        color: #d4edda;
+      }
+      .status.error {
+        background: #721c24;
+        color: #f8d7da;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Secure Video Stream</h1>
+      <div id="status" class="status">Connecting...</div>
+      <canvas id="canvas" width="1280" height="720"></canvas>
+
+      <div class="controls">
+        <button onclick="sendControl('pause')">Pause</button>
+        <button onclick="sendControl('resume')">Resume</button>
+        <button onclick="disconnect()">Disconnect</button>
+      </div>
+
+      <div class="quality-control">
+        <label for="quality">JPEG Quality:</label>
+        <input type="range" id="quality" min="1" max="100" value="20" />
+        <span id="qualityValue">20</span>
+        <button onclick="setQuality()">Apply</button>
+      </div>
+
+      <!-- Gyro enable button for iOS/permissioned browsers -->
+      <button id="enableGyroBtn" style="display: none; margin-top: 10px;">
+        Enable Motion Tracking
+      </button>
+    </div>
+    <script src="{% static 'socket_test/script.js' %}"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36203.30 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "VRenv(raylib)", "VRenv(raylib).vcxproj", "{10B613E8-E18B-433B-BC14-E5206FD9F0B8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Debug|x64.ActiveCfg = Debug|x64
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Debug|x64.Build.0 = Debug|x64
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Debug|x86.ActiveCfg = Debug|Win32
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Debug|x86.Build.0 = Debug|Win32
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Release|x64.ActiveCfg = Release|x64
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Release|x64.Build.0 = Release|x64
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Release|x86.ActiveCfg = Release|Win32
+		{10B613E8-E18B-433B-BC14-E5206FD9F0B8}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A1ADF6B5-1DAB-45F1-97CB-772B2D6D647F}
+	EndGlobalSection
+EndGlobal

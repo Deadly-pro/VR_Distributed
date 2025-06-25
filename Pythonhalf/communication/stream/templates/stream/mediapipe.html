@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hand Detection</title>
+  <style>
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    video, canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      transform: scaleX(-1);
+    }
+    #container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+    }
+    button {
+      margin: 10px;
+    }
+  </style>
+</head>
+<body>
+  <button id="webcamButton">ENABLE PREDICTIONS</button>
+  <div id="container">
+    <video id="webcam" autoplay playsinline></video>
+    <canvas id="output_canvas"></canvas>
+  </div>
+
+  <script type="module">
+    import {
+      HandLandmarker,
+      FilesetResolver
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
+
+    let handLandmarker;
+    let runningMode = "IMAGE";
+    let webcamRunning = false;
+    const video = document.getElementById("webcam");
+    const canvas = document.getElementById("output_canvas");
+    const ctx = canvas.getContext("2d");
+    const btn = document.getElementById("webcamButton");
+
+    const createHandLandmarker = async () => {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
+      );
+      handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task`,
+          delegate: "GPU"
+        },
+        runningMode,
+        numHands: 2
+      });
+    };
+    createHandLandmarker();
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      btn.addEventListener("click", enableCam);
+    }
+
+    function enableCam() {
+      if (!handLandmarker) return console.log("Model not ready");
+
+      webcamRunning = !webcamRunning;
+      btn.innerText = webcamRunning ? "DISABLE" : "ENABLE";
+
+      if (webcamRunning) {
+        navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+          video.srcObject = stream;
+          video.addEventListener("loadeddata", predictWebcam);
+        });
+      }
+    }
+
+    let lastVideoTime = -1;
+
+    async function predictWebcam() {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      if (runningMode === "IMAGE") {
+        runningMode = "VIDEO";
+        await handLandmarker.setOptions({ runningMode: "VIDEO" });
+      }
+
+      const startTimeMs = performance.now();
+      let results;
+      if (lastVideoTime !== video.currentTime) {
+        lastVideoTime = video.currentTime;
+        results = handLandmarker.detectForVideo(video, startTimeMs);
+      }
+
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (results?.landmarks) {
+        for (const landmarks of results.landmarks) {
+          drawLandmarks(ctx, landmarks, "#FF0000");
+          drawConnectors(ctx, landmarks, HAND_CONNECTIONS, "#00FF00");
+        }
+      }
+
+      ctx.restore();
+
+      if (webcamRunning) {
+        window.requestAnimationFrame(predictWebcam);
+      }
+    }
+
+    // Basic Hand Connections from MediaPipe
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [5,6],[6,7],[7,8],
+      [9,10],[10,11],[11,12],
+      [13,14],[14,15],[15,16],
+      [17,18],[18,19],[19,20],
+      [0,5],[5,9],[9,13],[13,17],[17,0]
+    ];
+
+    function drawConnectors(ctx, landmarks, connections, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      for (const [i, j] of connections) {
+        const p1 = landmarks[i];
+        const p2 = landmarks[j];
+        ctx.beginPath();
+        ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+        ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+        ctx.stroke();
+      }
+    }
+
+    function drawLandmarks(ctx, landmarks, color) {
+      ctx.fillStyle = color;
+      for (const lm of landmarks) {
+        ctx.beginPath();
+        ctx.arc(lm.x * canvas.width, lm.y * canvas.height, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+  </script>
+</body>
+</html>

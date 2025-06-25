@@ -1,0 +1,22 @@
+{
+    "version": 1,
+    "revision": 0,
+    "rules": [
+        {
+            "primary-output": "VRenv(raylib)\\x64\\Debug\\windocapture.obj",
+            "outputs": [
+                "VRenv(raylib)\\x64\\Debug\\windocapture.h_ADE9EB968A1F5651.ifc.dt.module.json",
+                "VRenv(raylib)\\x64\\Debug\\windocapture.h_ADE9EB968A1F5651.ifc.dt.d.json",
+                "VRenv(raylib)\\x64\\Debug\\windocapture.h.ifc"
+            ],
+            "provides": [
+                {
+                    "logical-name": "C:\\Users\\yoy91\\OneDrive\\Documents\\Projects\\VRenv(raylib)\\windocapture.h",
+                    "source-path": "c:\\users\\yoy91\\onedrive\\documents\\projects\\vrenv(raylib)\\windocapture.h",
+                    "lookup-method": "absolute"
+                }
+            ],
+            "requires": []
+        }
+    ]
+}
