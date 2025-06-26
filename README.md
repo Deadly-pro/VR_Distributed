@@ -1,1 +1,1 @@
-Rearragned File Structure for VR Distributed before final release 
+Run the server by running the command `daphne -e ssl:8000:privateKey=key.pem:certKey=cert.pem django_test.asgi:application`. Make sure you are on the `PythonHalf/communication' directory

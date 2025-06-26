@@ -9,7 +9,12 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <filesystem>
 #include <iostream>
+#include <io.h>
+#include <fcntl.h>
+
+namespace fs = std::filesystem;
 
 // Keep mapped memory persistent to avoid remapping every frame
 static boost::interprocess::mapped_region* handRegion = nullptr;
@@ -39,7 +44,6 @@ std::vector<std::pair<std::string, std::vector<Vector3>>> ReadHandDataFromShared
             std::vector<Vector3> points;
 
             for (const auto& lm : hand["landmarks"]) {
-                // Keep MediaPipe normalized coordinates for proper transformation
                 Vector3 pt = {
                     static_cast<float>(lm["x"].get<double>()),
                     static_cast<float>(lm["y"].get<double>()),
@@ -50,8 +54,8 @@ std::vector<std::pair<std::string, std::vector<Vector3>>> ReadHandDataFromShared
             handPoints.emplace_back(handType, points);
         }
     }
-    catch (const std::exception& e) {
-        std::cerr << "Shared memory parse error: " << e.what() << "\n";
+    catch (...) {
+        // Silent fail - just return empty vector
     }
 
     return handPoints;
@@ -73,12 +77,29 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch) {
     }
 }
 
+bool isStdoutPiped() {
+    return !_isatty(_fileno(stdout));
+}
+
 int main(void) {
-    const int screenWidth = 1800;
-    const int screenHeight = 900;
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(screenWidth, screenHeight, "VR Viewer with Hands");
-    //SetTargetFPS(90); // VR-appropriate framerate
+    // Check if stdout is NOT piped and show message
+    if (!isStdoutPiped()) {
+        std::cerr << "This program outputs frame data to stdout. Please run the Python file instead." << std::endl;
+        return 1;
+    }
+
+    const int screenWidth = 1920;
+    const int screenHeight = 1080;
+
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_HIDDEN);
+    InitWindow(screenWidth, screenHeight, "VR Viewer");
+    SetTargetFPS(60);
+
+    // Redirect stderr to null to prevent interference with binary stdout
+    freopen_s((FILE**)stderr, "NUL", "w", stderr);
+    // Ensure stdout is in binary mode and unbuffered
+    _setmode(_fileno(stdout), _O_BINARY);
+    setvbuf(stdout, nullptr, _IONBF, 0);
 
     VrDeviceInfo device = {
         .hResolution = screenWidth,
@@ -105,30 +126,44 @@ int main(void) {
     SetShaderValue(distortion, GetShaderLocation(distortion, "chromaAbParam"), device.chromaAbCorrection, SHADER_UNIFORM_VEC4);
 
     RenderTexture2D target = LoadRenderTexture(screenWidth, screenHeight);
+
     VRDesktopRenderer desktopRenderer;
     desktopRenderer.initialize();
-    desktopRenderer.setMaxUpdateRate(120.0f);
+    desktopRenderer.setMaxUpdateRate(60.0f);
 
     Player player;
     const float eyeSeparation = device.interpupillaryDistance / 2.0f;
-    bool mouseDebugMode = true;
+
     Vector2 lastMousePos = { 0 };
     bool firstMouse = true;
 
     Vector3 panelPosition = { 0.0f, 3.0f, 4.0f };
     Vector3 panelSize = { 24.0f, 6.75f, 0.1f };
 
+    // Path resolution
+    fs::path exePath = fs::absolute(fs::path(__argv[0]));
+    fs::path projectRoot = exePath.parent_path().parent_path().parent_path().parent_path();
+    fs::path sharedDir = projectRoot / "Shared";
+    std::string handFilePath = (sharedDir / "hands.dat").string();
+    std::string gyroFilePath = (sharedDir / "gyro.dat").string();
+
+    float timeSinceLastSend = 0.0f;
+    const float sendInterval = 1.0f / 60.0f;
+
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
 
-        if (mouseDebugMode) {
-            Vector2 mousePos = GetMousePosition();
-            if (firstMouse) { lastMousePos = mousePos; firstMouse = false; }
-            Vector2 delta = { mousePos.x - lastMousePos.x, mousePos.y - lastMousePos.y };
+        // Mouse input
+        Vector2 mousePos = GetMousePosition();
+        if (firstMouse) {
             lastMousePos = mousePos;
-            player.HandleMouseLook(delta);
+            firstMouse = false;
         }
+        Vector2 delta = { mousePos.x - lastMousePos.x, mousePos.y - lastMousePos.y };
+        lastMousePos = mousePos;
+        player.HandleMouseLook(delta);
 
+        // Keyboard input
         Vector3 move = { 0 };
         if (IsKeyDown(KEY_W)) move.z -= 1;
         if (IsKeyDown(KEY_S)) move.z += 1;
@@ -138,19 +173,23 @@ int main(void) {
         if (IsKeyDown(KEY_LEFT_SHIFT)) move.y -= 1;
         player.Move(move, deltaTime);
 
+        // Update gyro data
         float gyroYaw, gyroPitch;
-        if (ReadGyroData("../Shared/gyro.dat", gyroYaw, gyroPitch)) {
+        if (ReadGyroData(gyroFilePath, gyroYaw, gyroPitch)) {
             player.SetYawPitch(gyroYaw, gyroPitch);
         }
 
-        auto handData = ReadHandDataFromSharedMemory("../Shared/hands.dat");
+        // Update hand data
+        auto handData = ReadHandDataFromSharedMemory(handFilePath);
+
         player.Update(deltaTime);
         desktopRenderer.update();
 
+        // Render VR scene
         BeginTextureMode(target);
         ClearBackground(RAYWHITE);
 
-        // Left eye viewport
+        // Left eye
         rlViewport(0, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetLeftEyeCamera(eyeSeparation));
         DrawCube({ 0,0,0 }, 2, 2, 2, RED);
@@ -159,7 +198,7 @@ int main(void) {
         player.DrawHands(handData);
         EndMode3D();
 
-        // Right eye viewport
+        // Right eye
         rlViewport(screenWidth / 2, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetRightEyeCamera(eyeSeparation));
         DrawCube({ 0,0,0 }, 2, 2, 2, RED);
@@ -171,15 +210,33 @@ int main(void) {
         rlViewport(0, 0, screenWidth, screenHeight);
         EndTextureMode();
 
+        // Need to call BeginDrawing/EndDrawing for Raylib to process the render
         BeginDrawing();
-        ClearBackground(RAYWHITE);
-        BeginShaderMode(distortion);
-        DrawTexturePro(target.texture, { 0,0, (float)target.texture.width, -(float)target.texture.height },
-            { 0,0,(float)GetScreenWidth(),(float)GetScreenHeight() }, { 0,0 }, 0.0f, WHITE);
-        EndShaderMode();
-
-        DrawFPS(10, 10);
         EndDrawing();
+
+        // Always send frame data to stdout (no screen display)
+        timeSinceLastSend += deltaTime;
+        if (timeSinceLastSend >= sendInterval) {
+            timeSinceLastSend = 0.0f;
+
+            Image frame = LoadImageFromTexture(target.texture);
+
+            uint32_t width = static_cast<uint32_t>(frame.width);
+            uint32_t height = static_cast<uint32_t>(frame.height);
+            uint32_t magic = 0xDEADBEEF;
+
+            // Send header
+            std::cout.write(reinterpret_cast<const char*>(&magic), sizeof(uint32_t));
+            std::cout.write(reinterpret_cast<const char*>(&width), sizeof(uint32_t));
+            std::cout.write(reinterpret_cast<const char*>(&height), sizeof(uint32_t));
+
+            // Send pixel data
+            size_t pixel_data_size = width * height * 4;
+            std::cout.write(reinterpret_cast<const char*>(frame.data), pixel_data_size);
+            std::cout.flush();
+
+            UnloadImage(frame);
+        }
     }
 
     desktopRenderer.cleanup();

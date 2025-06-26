@@ -34,6 +34,7 @@ ALLOWED_HOSTS = ['*'] # TODO: CHANGE IT LATER!! DO NOT ALLOW RANDOM HOSTS IN PRO
 INSTALLED_APPS = [
     'daphne',  # For Daphne server support
     "channels",  # For Django Channels support
+    'django_extensions',  # for https
     "socket_test",  # Custom app for socket tests
     "django.contrib.admin",
     "django.contrib.auth",
@@ -158,3 +159,9 @@ LOGGING = {
         },
     },
 }
+
+# Runserver plus command for development with SSL
+RUNSERVERPLUS_USE_RELOAD = True
+RUNSERVERPLUS_CERT_FILE = os.path.join(BASE_DIR, 'cert.pem')
+RUNSERVERPLUS_KEY_FILE = os.path.join(BASE_DIR, 'key.pem')
+RUNSERVERPLUS_ADDRESS_PORT = '0.0.0.0:8000'
