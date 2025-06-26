@@ -131,7 +131,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="hands.cpp" />
-    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="vr_main.cpp" />
     <ClCompile Include="player.cpp" />
     <ClCompile Include="screen_capture.cpp" />
     <ClCompile Include="VRstupid.cpp" />
