@@ -13,12 +13,33 @@
 #include <iostream>
 #include <io.h>
 #include <fcntl.h>
+#include <chrono>
+#include <thread>
+#include <memory>
+
+// For JPEG encoding - you'll need to install libjpeg-turbo
+extern "C" {
+#include <turbojpeg.h>
+}
 
 namespace fs = std::filesystem;
 
 // Keep mapped memory persistent to avoid remapping every frame
 static boost::interprocess::mapped_region* handRegion = nullptr;
 static std::unique_ptr<boost::interprocess::file_mapping> handFile;
+
+// JPEG encoder instance - reuse for performance
+static tjhandle jpegCompressor = nullptr;
+
+struct FrameData {
+    uint32_t magic = 0xDEADBEEF;
+    uint32_t timestamp_ms;
+    uint32_t frame_size;
+    uint32_t width;
+    uint32_t height;
+    uint32_t quality;
+    // Followed by JPEG data
+};
 
 std::vector<std::pair<std::string, std::vector<Vector3>>> ReadHandDataFromSharedMemory(const std::string& filename) {
     namespace bip = boost::interprocess;
@@ -81,25 +102,119 @@ bool isStdoutPiped() {
     return !_isatty(_fileno(stdout));
 }
 
+bool InitializeJPEGEncoder() {
+    jpegCompressor = tjInitCompress();
+    if (!jpegCompressor) {
+        std::cerr << "Failed to initialize JPEG compressor: " << tjGetErrorStr() << std::endl;
+        return false;
+    }
+    return true;
+}
+
+void CleanupJPEGEncoder() {
+    if (jpegCompressor) {
+        tjDestroy(jpegCompressor);
+        jpegCompressor = nullptr;
+    }
+}
+
+bool EncodeFrameToJPEG(const unsigned char* rgbData, int width, int height, int quality,
+    unsigned char** jpegBuf, unsigned long* jpegSize) {
+    if (!jpegCompressor) return false;
+
+    // Convert RGBA to RGB (drop alpha channel)
+    std::vector<unsigned char> rgbBuffer(width * height * 3);
+    for (int i = 0; i < width * height; ++i) {
+        rgbBuffer[i * 3 + 0] = rgbData[i * 4 + 0]; // R
+        rgbBuffer[i * 3 + 1] = rgbData[i * 4 + 1]; // G
+        rgbBuffer[i * 3 + 2] = rgbData[i * 4 + 2]; // B
+    }
+
+    int result = tjCompress2(jpegCompressor, rgbBuffer.data(), width, 0, height, TJPF_RGB,
+        jpegBuf, jpegSize, TJSAMP_422, quality, TJFLAG_FASTDCT);
+
+    return result == 0;
+}
+
+uint32_t GetCurrentTimeMs() {
+    auto now = std::chrono::high_resolution_clock::now();
+    auto duration = now.time_since_epoch();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+}
+
+bool SendEncodedFrame(const unsigned char* jpegData, unsigned long jpegSize,
+    int width, int height, int quality) {
+    FrameData header;
+    header.magic = 0xDEADBEEF;
+    header.timestamp_ms = GetCurrentTimeMs();
+    header.frame_size = static_cast<uint32_t>(jpegSize);
+    header.width = static_cast<uint32_t>(width);
+    header.height = static_cast<uint32_t>(height);
+    header.quality = static_cast<uint32_t>(quality);
+
+    // Send header (with magic number at start)
+    std::cout.write(reinterpret_cast<const char*>(&header), sizeof(FrameData));
+    std::cout.write(reinterpret_cast<const char*>(jpegData), jpegSize);
+    std::cout.flush();
+
+    return true;
+}
+
 int main(void) {
+    // Open debug log file for non-intrusive logging
+    std::ofstream debugLog("debug.log", std::ios::app);
+    debugLog << "[START] VR process launched\n";
+    debugLog.flush();
+
     // Check if stdout is NOT piped and show message
     if (!isStdoutPiped()) {
-        std::cerr << "This program outputs frame data to stdout. Please run the Python file instead." << std::endl;
+        debugLog << "[ERROR] Stdout is not piped. Exiting.\n";
+        debugLog.flush();
         return 1;
     }
 
+    // Suppress all std::cout output
+    // std::cout.rdbuf(nullptr);
+
     const int screenWidth = 1920;
     const int screenHeight = 1080;
+    const int jpegQuality = 85; // Adjustable quality (1-100)
+    const float targetFPS = 60.0f;
+    const float frameTime = 1.0f / targetFPS;
 
+    debugLog << "[INFO] Before JPEG encoder init\n";
+    debugLog.flush();
+    if (!InitializeJPEGEncoder()) {
+        debugLog << "[ERROR] Failed to initialize JPEG encoder\n";
+        debugLog.flush();
+        return 1;
+    }
+
+    debugLog << "[INFO] Before disabling Raylib logs\n";
+    debugLog.flush();
+    // Disable all Raylib logging
+    SetTraceLogLevel(LOG_NONE);
+
+    debugLog << "[INFO] Before InitWindow\n";
+    debugLog.flush();
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_HIDDEN);
     InitWindow(screenWidth, screenHeight, "VR Viewer");
-    SetTargetFPS(60);
+    debugLog << "[INFO] Window initialized\n";
+    debugLog.flush();
+    SetTargetFPS(0); // Uncapped FPS - we'll control it manually
 
-    // Redirect stderr to null to prevent interference with binary stdout
-    freopen_s((FILE**)stderr, "NUL", "w", stderr);
-    // Ensure stdout is in binary mode and unbuffered
+    // Redirect stderr and stdout to null to prevent interference with binary stdout
+    // Remove this line:
+    // freopen_s(&nullout, "NUL", "w", stdout);  // ALSO disables stdout fallback from libraries
+
+    // Keep only:
+    FILE* nullout;
+    freopen_s(&nullout, "NUL", "w", stderr);  // Disables stderr only
     _setmode(_fileno(stdout), _O_BINARY);
-    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stdout, nullptr, _IONBF, 128 * 1024);
+
+    debugLog << "[INFO] Entering main loop\n";
+    debugLog.flush();
 
     VrDeviceInfo device = {
         .hResolution = screenWidth,
@@ -147,11 +262,24 @@ int main(void) {
     std::string handFilePath = (sharedDir / "hands.dat").string();
     std::string gyroFilePath = (sharedDir / "gyro.dat").string();
 
-    float timeSinceLastSend = 0.0f;
-    const float sendInterval = 1.0f / 60.0f;
+    // Timing variables
+    auto lastFrameTime = std::chrono::high_resolution_clock::now();
+    int frameCount = 0;
+    auto startTime = std::chrono::high_resolution_clock::now();
 
     while (!WindowShouldClose()) {
-        float deltaTime = GetFrameTime();
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+
+        // Frame rate limiting
+        if (deltaTime < frameTime) {
+            std::this_thread::sleep_for(std::chrono::microseconds(
+                static_cast<int>((frameTime - deltaTime) * 1000000)
+            ));
+            currentTime = std::chrono::high_resolution_clock::now();
+            deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+        }
+        lastFrameTime = currentTime;
 
         // Mouse input
         Vector2 mousePos = GetMousePosition();
@@ -214,35 +342,47 @@ int main(void) {
         BeginDrawing();
         EndDrawing();
 
-        // Always send frame data to stdout (no screen display)
-        timeSinceLastSend += deltaTime;
-        if (timeSinceLastSend >= sendInterval) {
-            timeSinceLastSend = 0.0f;
+        // Encode and send frame
+        Image frame = LoadImageFromTexture(target.texture);
 
-            Image frame = LoadImageFromTexture(target.texture);
+        // Encode to JPEG
+        unsigned char* jpegBuf = nullptr;
+        unsigned long jpegSize = 0;
 
-            uint32_t width = static_cast<uint32_t>(frame.width);
-            uint32_t height = static_cast<uint32_t>(frame.height);
-            uint32_t magic = 0xDEADBEEF;
+        if (EncodeFrameToJPEG((unsigned char*)frame.data, frame.width, frame.height,
+            jpegQuality, &jpegBuf, &jpegSize)) {
 
-            // Send header
-            std::cout.write(reinterpret_cast<const char*>(&magic), sizeof(uint32_t));
-            std::cout.write(reinterpret_cast<const char*>(&width), sizeof(uint32_t));
-            std::cout.write(reinterpret_cast<const char*>(&height), sizeof(uint32_t));
+            // Send encoded frame
+            SendEncodedFrame(jpegBuf, jpegSize, frame.width, frame.height, jpegQuality);
+            debugLog << "[INFO] Frame encoded and sent, size: " << jpegSize << "\n";
+            debugLog.flush();
 
-            // Send pixel data
-            size_t pixel_data_size = width * height * 4;
-            std::cout.write(reinterpret_cast<const char*>(frame.data), pixel_data_size);
-            std::cout.flush();
-
-            UnloadImage(frame);
+            // Free JPEG buffer
+            tjFree(jpegBuf);
         }
+        // else {
+        //     std::cerr << "JPEG encoding failed: " << tjGetErrorStr() << std::endl;
+        // }
+
+        UnloadImage(frame);
+
+        frameCount++;
+
+        // Log performance stats every 5 seconds
+        // auto elapsed = std::chrono::duration<float>(currentTime - startTime).count();
+        // if (elapsed >= 5.0f) {
+        //     float avgFPS = frameCount / elapsed;
+        //     std::cerr << "Average FPS: " << avgFPS << ", Frame time: " << (deltaTime * 1000) << "ms" << std::endl;
+        //     frameCount = 0;
+        //     startTime = currentTime;
+        // }
     }
 
     desktopRenderer.cleanup();
     UnloadVrStereoConfig(config);
     UnloadRenderTexture(target);
     UnloadShader(distortion);
+    CleanupJPEGEncoder();
     CloseWindow();
     return 0;
 }

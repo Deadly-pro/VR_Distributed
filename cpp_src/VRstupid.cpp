@@ -12,11 +12,11 @@ VRDesktopRenderer::~VRDesktopRenderer() {
 }
 
 void VRDesktopRenderer::initialize() {
-    std::cout << "Initializing VR Desktop Renderer..." << std::endl;
+    //std::cout << "Initializing VR Desktop Renderer..." << std::endl;
 
     bool success = ScreenCapture::initialize();
     if (!success) {
-        std::cout << "Failed to initialize screen capture!" << std::endl;
+        //std::cout << "Failed to initialize screen capture!" << std::endl;
         return;
     }
 
@@ -24,11 +24,11 @@ void VRDesktopRenderer::initialize() {
     textureInitialized = false;
     lastUpdate = std::chrono::steady_clock::now();
 
-    std::cout << "VR Desktop Renderer initialized successfully" << std::endl;
+    //std::cout << "VR Desktop Renderer initialized successfully" << std::endl;
 }
 
 void VRDesktopRenderer::cleanup() {
-    std::cout << "Cleaning up VR Desktop Renderer..." << std::endl;
+    //std::cout << "Cleaning up VR Desktop Renderer..." << std::endl;
     if (textureInitialized) {
         UnloadTexture(desktopTexture);
         textureInitialized = false;
@@ -66,7 +66,7 @@ void VRDesktopRenderer::update() {
             else {
                 desktopTexture = LoadTextureFromImage(desktopImage);
                 textureInitialized = true;
-                std::cout << "Created desktop texture: " << frame.width << "x" << frame.height << std::endl;
+                //std::cout << "Created desktop texture: " << frame.width << "x" << frame.height << std::endl;
             }
 
             lastUpdate = now;
@@ -104,7 +104,7 @@ void VRDesktopRenderer::renderDesktopPanel(Vector3 panelPosition, Vector3 panelS
 
 void VRDesktopRenderer::setMaxUpdateRate(float fps) {
     maxUpdateRate = 1.0f / fps;
-    std::cout << "Set max texture update rate to " << fps << " FPS" << std::endl;
+    //std::cout << "Set max texture update rate to " << fps << " FPS" << std::endl;
 }
 
 bool VRDesktopRenderer::isTextureReady() const {

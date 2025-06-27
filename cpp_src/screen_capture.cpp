@@ -28,19 +28,19 @@ bool initializeCaptureThread() {
 
     screenDC = GetDC(NULL);
     if (!screenDC) {
-        std::cout << "Failed to get screen DC" << std::endl;
+        // // std::cout << "Failed to get screen DC" << std::endl;
         return false;
     }
 
     memoryDC = CreateCompatibleDC(screenDC);
     if (!memoryDC) {
-        std::cout << "Failed to create memory DC" << std::endl;
+        // // std::cout << "Failed to create memory DC" << std::endl;
         ReleaseDC(NULL, screenDC);
         return false;
     }
 
     threadInitialized = true;
-    std::cout << "Capture thread initialized successfully" << std::endl;
+    // // std::cout << "Capture thread initialized successfully" << std::endl;
     return true;
 }
 
@@ -60,7 +60,7 @@ void cleanupCaptureThread() {
     threadInitialized = false;
     lastWidth = 0;
     lastHeight = 0;
-    std::cout << "Capture thread cleaned up" << std::endl;
+    // // std::cout << "Capture thread cleaned up" << std::endl;
 }
 
 CapturedFrame ScreenCapture::captureDesktopInternal() {
@@ -68,7 +68,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
 
     if (!threadInitialized) {
         if (!initializeCaptureThread()) {
-            std::cout << "Failed to initialize capture thread" << std::endl;
+            // // std::cout << "Failed to initialize capture thread" << std::endl;
             return frame;
         }
     }
@@ -77,7 +77,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
     if (screenWidth <= 0 || screenHeight <= 0) {
-        std::cout << "Invalid screen dimensions: " << screenWidth << "x" << screenHeight << std::endl;
+        // // std::cout << "Invalid screen dimensions: " << screenWidth << "x" << screenHeight << std::endl;
         return frame;
     }
 
@@ -89,7 +89,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
 
         bitmap = CreateCompatibleBitmap(screenDC, screenWidth, screenHeight);
         if (!bitmap) {
-            std::cout << "Failed to create compatible bitmap" << std::endl;
+            // // std::cout << "Failed to create compatible bitmap" << std::endl;
             return frame;
         }
 
@@ -104,7 +104,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
 
         lastWidth = screenWidth;
         lastHeight = screenHeight;
-        std::cout << "Created new bitmap: " << screenWidth << "x" << screenHeight << std::endl;
+        // // std::cout << "Created new bitmap: " << screenWidth << "x" << screenHeight << std::endl;
     }
 
     HBITMAP oldBitmap = (HBITMAP)SelectObject(memoryDC, bitmap);
@@ -113,7 +113,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
     BOOL blitResult = BitBlt(memoryDC, 0, 0, screenWidth, screenHeight, screenDC, 0, 0, SRCCOPY);
     if (!blitResult) {
         DWORD error = GetLastError();
-        std::cout << "BitBlt failed with error: " << error << std::endl;
+        // // std::cout << "BitBlt failed with error: " << error << std::endl;
         SelectObject(memoryDC, oldBitmap);
         return frame;
     }
@@ -127,7 +127,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
 
     if (result == 0) {
         DWORD error = GetLastError();
-        std::cout << "GetDIBits failed with error: " << error << std::endl;
+        // // std::cout << "GetDIBits failed with error: " << error << std::endl;
         return frame;
     }
 
@@ -146,7 +146,7 @@ CapturedFrame ScreenCapture::captureDesktopInternal() {
 }
 
 void ScreenCapture::captureThreadFunction() {
-    std::cout << "Capture thread started" << std::endl;
+    // // std::cout << "Capture thread started" << std::endl;
     isRunning = true;
 
     int frameCount = 0;
@@ -167,13 +167,13 @@ void ScreenCapture::captureThreadFunction() {
             // Log progress every 5 seconds
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(now - lastLog).count() >= 5) {
-                std::cout << "Captured " << frameCount << " frames in last 5 seconds, queue size: " << frameQueue.size() << std::endl;
+                // // std::cout << "Captured " << frameCount << " frames in last 5 seconds, queue size: " << frameQueue.size() << std::endl;
                 frameCount = 0;
                 lastLog = now;
             }
         }
         else {
-            std::cout << "Failed to capture frame" << std::endl;
+            // // // std::cout << "Failed to capture frame" << std::endl;
         }
 
         // Sleep for the remaining time to maintain capture rate
@@ -188,16 +188,16 @@ void ScreenCapture::captureThreadFunction() {
 
     cleanupCaptureThread();
     isRunning = false;
-    std::cout << "Capture thread stopped" << std::endl;
+    // // // std::cout << "Capture thread stopped" << std::endl;
 }
 
 bool ScreenCapture::initialize() {
     if (captureThread && isRunning) {
-        std::cout << "Capture already initialized" << std::endl;
+        // // // std::cout << "Capture already initialized" << std::endl;
         return true;
     }
 
-    std::cout << "Initializing screen capture..." << std::endl;
+    // // // std::cout << "Initializing screen capture..." << std::endl;
     shouldStop = false;
     captureThread = std::make_unique<std::thread>(captureThreadFunction);
 
@@ -209,16 +209,16 @@ bool ScreenCapture::initialize() {
     }
 
     if (!isRunning) {
-        std::cout << "Failed to start capture thread within timeout" << std::endl;
+        // // // std::cout << "Failed to start capture thread within timeout" << std::endl;
         return false;
     }
 
-    std::cout << "Screen capture initialized successfully" << std::endl;
+    // // std::cout << "Screen capture initialized successfully" << std::endl;
     return true;
 }
 
 void ScreenCapture::cleanup() {
-    std::cout << "Cleaning up screen capture..." << std::endl;
+    // // std::cout << "Cleaning up screen capture..." << std::endl;
     if (captureThread) {
         shouldStop = true;
         if (captureThread->joinable()) {
@@ -233,7 +233,7 @@ void ScreenCapture::cleanup() {
         frameQueue.tryPop();
         clearedFrames++;
     }
-    std::cout << "Cleared " << clearedFrames << " remaining frames" << std::endl;
+    // // std::cout << "Cleared " << clearedFrames << " remaining frames" << std::endl;
 }
 
 std::optional<CapturedFrame> ScreenCapture::getLatestFrame() {
@@ -242,7 +242,7 @@ std::optional<CapturedFrame> ScreenCapture::getLatestFrame() {
 
 void ScreenCapture::setCaptureRate(float fps) {
     captureRate = 1.0f / fps;
-    std::cout << "Set capture rate to " << fps << " FPS" << std::endl;
+    // // std::cout << "Set capture rate to " << fps << " FPS" << std::endl;
 }
 
 bool ScreenCapture::isInitialized() {

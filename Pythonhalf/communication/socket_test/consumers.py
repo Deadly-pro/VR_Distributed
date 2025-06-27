@@ -22,10 +22,43 @@ from Crypto.PublicKey import RSA
 shared_memory = sendtocpp.SharedMemoryHandler(shm_path="gyro.dat", shm_size=65536)
 logger = logging.getLogger(__name__)
 
-# --- Toggle Options ---
-USE_H264 = False      # Set False to use JPEG
-USE_GPU = True       # If True, will use GPU encoder like NVIDIA's NVENC (FFmpeg needed)
+# Frame data structure matching C++
+class FrameHeader:
+    def __init__(self, data: bytes):
+        fields = struct.unpack("<IIIIII", data)
+        self.magic = fields[0]
+        self.timestamp_ms = fields[1]
+        self.frame_size = fields[2]
+        self.width = fields[3]
+        self.height = fields[4]
+        self.quality = fields[5]
+    
+    @property
+    def is_valid(self):
+        return (self.magic == 0xDEADBEEF and 
+                self.frame_size > 0 and 
+                self.width > 0 and self.height > 0 and
+                self.width <= 4000 and self.height <= 4000)
 
+MAGIC_NUMBER = 0xDEADBEEF
+HEADER_SIZE = 24
+
+def sync_and_read_frame_header(stream) -> Optional['FrameHeader']:
+    buffer = b''
+    while True:
+        chunk = stream.read(1)
+        if not chunk:
+            return None
+        buffer += chunk
+        if len(buffer) >= 4:
+            maybe_magic = struct.unpack('<I', buffer[-4:])[0]
+            if maybe_magic == MAGIC_NUMBER:
+                rest = stream.read(HEADER_SIZE - 4)
+                if len(rest) != (HEADER_SIZE - 4):
+                    return None
+                return FrameHeader(buffer[-4:] + rest)
+            if len(buffer) > 4:
+                buffer = buffer[-3:]
 
 class StreamingConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
@@ -39,14 +72,13 @@ class StreamingConsumer(AsyncWebsocketConsumer):
         self.aes_key: Optional[bytes] = None
         self.iv: Optional[bytes] = None
         self.stream_task: Optional[asyncio.Task] = None
-        self.frame_queue = Queue(maxsize=3)
+        self.frame_queue = Queue(maxsize=2)  # Small queue for low latency
         self.capture_thread: Optional[Thread] = None
         self.capture_ready = Event()
         self.sequence_number = 0
         self.frame_width = 1920  # Expected VR frame dimensions
         self.frame_height = 1080
         self.fps = 60
-        self.jpeg_quality = 20
         
         # VR executable path - adjust as needed
         self.vr_exe_path = os.path.join("..", "..", "test_main.py")  # Relative path from consumer location
@@ -64,110 +96,89 @@ class StreamingConsumer(AsyncWebsocketConsumer):
             self.pub_key = None
             self.priv_key = None
 
+    def read_exact(self, stream, size: int) -> Optional[bytes]:
+        """Read exactly 'size' bytes from stream with timeout"""
+        data = b''
+        timeout_count = 0
+        max_timeout = 100  # 100ms total timeout
+        
+        while len(data) < size:
+            try:
+                chunk = stream.read(size - len(data))
+                if not chunk:
+                    timeout_count += 1
+                    if timeout_count > max_timeout:
+                        return None
+                    time.sleep(0.001)  # 1ms wait
+                    continue
+                    
+                data += chunk
+                timeout_count = 0  # Reset timeout counter
+                
+            except Exception as e:
+                logger.error(f"Read error: {e}")
+                return None
+                
+        return data
+
     def capture_frames_from_vr(self):
         '''
-        Captures frames from the VR subprocess in a separate thread.
-        This replaces the camera capture functionality.
+        Captures JPEG-encoded frames from the VR subprocess in a separate thread.
+        Much more efficient than the previous raw frame approach.
         '''
-        logger.info("VR capture thread started")
+        logger.info("VR JPEG capture thread started")
         
         frame_count = 0
-        buffer = b''
-        magic_bytes = b'\xef\xbe\xad\xde'  # 0xDEADBEEF in little-endian
-        
-        # Pre-allocate for performance
-        expected_frame_size = 12 + (self.frame_width * self.frame_height * 4)
+        bytes_received = 0
+        start_time = time.time()
+        last_stat_time = start_time
         
         try:
             self.capture_ready.set()
-            logger.info("Starting VR frame capture...")
-            
+            logger.info("Starting VR JPEG frame capture...")
             while self.running and self.vr_process and self.vr_process.poll() is None:
                 try:
-                    # Read in larger chunks for efficiency
-                    chunk_size = min(65536, expected_frame_size - len(buffer) if len(buffer) < expected_frame_size else 65536)
-                    chunk = self.vr_process.stdout.read(chunk_size)
-                    
-                    if not chunk:
-                        time.sleep(0.001)  # Small delay to prevent busy waiting
+                    # Use sync-and-read to find the next valid frame header
+                    header = sync_and_read_frame_header(self.vr_process.stdout)
+                    if not header or not header.is_valid:
                         continue
-                        
-                    buffer += chunk
-                    
-                    # Process complete frames
-                    while len(buffer) >= 12:
-                        # Look for magic number at start of buffer
-                        if not buffer.startswith(magic_bytes):
-                            magic_pos = buffer.find(magic_bytes)
-                            if magic_pos < 0:
-                                # Keep last 11 bytes in case magic number is split
-                                buffer = buffer[-11:] if len(buffer) > 11 else b''
-                                break
-                            buffer = buffer[magic_pos:]
-                        
-                        # Parse header
+                    # Read JPEG data
+                    jpeg_data = self.read_exact(self.vr_process.stdout, header.frame_size)
+                    if not jpeg_data:
+                        logger.warning("Failed to read JPEG data")
+                        continue
+                    bytes_received += HEADER_SIZE + len(jpeg_data)
+                    frame_info = {
+                        'jpeg_data': jpeg_data,
+                        'width': header.width,
+                        'height': header.height,
+                        'quality': header.quality,
+                        'timestamp_ms': header.timestamp_ms
+                    }
+                    try:
+                        self.frame_queue.put_nowait(frame_info)
+                    except:
                         try:
-                            magic, width, height = struct.unpack("<III", buffer[:12])
-                            
-                            if magic != 0xDEADBEEF:
-                                buffer = buffer[1:]
-                                continue
-                            
-                            # Validate dimensions
-                            if width <= 0 or height <= 0 or width > 4000 or height > 4000:
-                                buffer = buffer[1:]
-                                continue
-                            
-                            image_size = width * height * 4
-                            total_frame_size = 12 + image_size
-                            
-                            # Wait for complete frame
-                            if len(buffer) < total_frame_size:
-                                break
-                            
-                            # Extract and process frame
-                            pixel_data = buffer[12:total_frame_size]
-                            
-                            # Convert to numpy array
-                            rgba = np.frombuffer(pixel_data, dtype=np.uint8).reshape((height, width, 4))
-                            rgba = np.flipud(rgba)  # Flip vertically for OpenCV
-                            bgr = cv2.cvtColor(rgba[:,:,:3], cv2.COLOR_RGB2BGR)  # Drop alpha channel
-                            
-                            # Add frame to queue (same logic as camera capture)
-                            if not self.frame_queue.full():
-                                self.frame_queue.put(bgr)
-                            else:
-                                # Remove oldest frame and add new one
-                                try:
-                                    self.frame_queue.get_nowait()
-                                except:
-                                    pass
-                                self.frame_queue.put(bgr)
-                                logger.warning("Frame queue was full, replaced oldest frame")
-                            
-                            frame_count += 1
-                            if frame_count % 30 == 0:  # Print every 30 frames
-                                logger.debug(f"VR frames processed: {frame_count}")
-                            
-                            # Remove processed frame
-                            buffer = buffer[total_frame_size:]
-                            
-                        except struct.error:
-                            buffer = buffer[1:]
-                            continue
-                        except Exception as e:
-                            logger.error(f"Frame processing error: {e}")
-                            buffer = buffer[1:]
-                            continue
-                            
+                            self.frame_queue.get_nowait()
+                            self.frame_queue.put_nowait(frame_info)
+                        except:
+                            pass
+                    frame_count += 1
+                    current_time = time.time()
+                    if current_time - last_stat_time >= 5.0:
+                        elapsed = current_time - start_time
+                        fps = frame_count / elapsed if elapsed > 0 else 0
+                        mbps = (bytes_received * 8 / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+                        logger.info(f"VR Stats - Frames: {frame_count}, FPS: {fps:.1f}, "
+                                    f"Data rate: {mbps:.2f} Mbps, Queue size: {self.frame_queue.qsize()}")
+                        last_stat_time = current_time
                 except Exception as e:
-                    logger.error(f"Error reading from VR process: {e}")
+                    logger.error(f"Frame capture error: {e}")
                     break
-                    
         except Exception as e:
-            logger.error(f"Error in capture_frames_from_vr: {e}")
+            logger.error(f"Fatal error in capture_frames_from_vr: {e}")
         finally:
-            logger.info(f"VR capture thread ended. Total frames: {frame_count}")
+            logger.info(f"VR JPEG capture thread ended. Total frames: {frame_count}")
 
     async def connect(self):
         '''
@@ -198,7 +209,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
     async def _initialize_vr_process(self):
         '''
         Initializes the VR subprocess and sets up the frame capture.
-        This replaces the camera initialization.
+        Now expects JPEG-encoded frames instead of raw frames.
         '''
         try:
             # Determine the actual executable path
@@ -214,12 +225,13 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                 logger.error(f"VR executable not found at {exe_path}")
                 return False
             
+            # Use larger buffers and disable buffering
             self.vr_process = subprocess.Popen(
                 [exe_path],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,  # Suppress stderr completely
+                stderr=subprocess.DEVNULL,
                 stdin=subprocess.PIPE,
-                bufsize=0
+                bufsize=1024*1024  # 1MB buffer
             )
             
             logger.info(f"VR subprocess started with PID: {self.vr_process.pid}")
@@ -245,83 +257,73 @@ class StreamingConsumer(AsyncWebsocketConsumer):
             logger.error(f"VR process init failed: {e}")
             return False
 
-    def encode_h264_with_ffmpeg(self, frame, width, height):
-        command = [
-            "ffmpeg", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24",
-            "-s", f"{width}x{height}", "-i", "-",
-            "-c:v", "libopenh264",  # fallback encoder
-            "-f", "h264", "-"       # output to stdout
-        ]
-
-        try:
-            process = subprocess.Popen(
-                command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-            out, err = process.communicate(input=frame.tobytes(), timeout=3.0)
-
-            if process.returncode != 0:
-                logger.error(f"FFmpeg failed: {err.decode()}")
-                return None
-
-            return out
-
-        except subprocess.TimeoutExpired:
-            process.kill()
-            logger.error("FFmpeg encode timed out")
-            return None
-
-        except Exception as e:
-            logger.error(f"Exception during FFmpeg encode: {e}")
-            return None
-
     async def _stream_video(self):
         '''
         This method runs in a separate asyncio task to stream video frames.
-        It reads frames from the VR process, encodes them as JPEG or H264, encrypts them using AES,
-        and sends them to the client.
+        Now works with pre-encoded JPEG frames from C++, eliminating the encoding bottleneck.
         '''
-        logger.info("VR stream video started")
+        logger.info("VR JPEG stream started")
+        frames_sent = 0
+        bytes_sent = 0
+        start_time = time.time()
+        last_stat_time = start_time
+        
         try:
             while self.running and self.vr_process and self.vr_process.poll() is None:
                 if self.frame_queue.empty():
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(0.001)  # Very short sleep
                     continue
 
-                frame = self.frame_queue.get_nowait()
+                frame_info = self.frame_queue.get_nowait()
+                jpeg_data = frame_info['jpeg_data']
                 
-                # Get actual frame dimensions for encoding
-                frame_height, frame_width = frame.shape[:2]
-                
-                if USE_H264:
-                    encoded_data = self.encode_h264_with_ffmpeg(frame, frame_width, frame_height)
-                    if not encoded_data:
-                        continue  # Skip frame if encode failed
-                else:
-                    ret, buffer = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality])
-                    if not ret:
-                        logger.warning("JPEG encoding failed")
-                        continue
-                    encoded_data = buffer.tobytes()
-
+                # Encrypt the JPEG data directly (no re-encoding needed!)
                 nonce = os.urandom(12)
                 cipher = AES.new(self.aes_key, AES.MODE_GCM, nonce=nonce)
-                ciphertext, tag = cipher.encrypt_and_digest(encoded_data)
+                ciphertext, tag = cipher.encrypt_and_digest(jpeg_data)
+                
+                # Create payload with frame metadata
                 timestamp = time.time()
                 total_size = len(nonce) + len(ciphertext) + len(tag)
-                header = struct.pack("dII", timestamp, self.sequence_number, total_size)
+                
+                # FIXED: Use the correct 16-byte header format that matches JavaScript expectations
+                header = struct.pack("dII", 
+                    timestamp,                    # 8 bytes - double: timestamp
+                    self.sequence_number,         # 4 bytes - uint32: sequence
+                    total_size,                   # 4 bytes - uint32: encrypted data size
+                )
+                # Total header size: 16 bytes (matches JavaScript headerSize = 16)
+                
                 payload = header + nonce + ciphertext + tag
-
+                
                 await self.send(bytes_data=payload)
+                
                 self.sequence_number += 1
+                frames_sent += 1
+                bytes_sent += len(payload)
+                
+                # Log statistics every 5 seconds
+                current_time = time.time()
+                if current_time - last_stat_time >= 5.0:
+                    elapsed = current_time - start_time
+                    fps = frames_sent / elapsed if elapsed > 0 else 0
+                    mbps = (bytes_sent * 8 / (1024 * 1024)) / elapsed if elapsed > 0 else 0
+                    
+                    logger.info(f"Stream Stats - Sent: {frames_sent}, FPS: {fps:.1f}, "
+                            f"Bandwidth: {mbps:.2f} Mbps, Avg frame size: {bytes_sent/frames_sent if frames_sent > 0 else 0:.0f} bytes")
+                    
+                    # Optional: Log frame info for debugging
+                    logger.debug(f"Frame info - Width: {frame_info['width']}, Height: {frame_info['height']}, "
+                            f"Quality: {frame_info['quality']}, VR timestamp: {frame_info['timestamp_ms']}")
+                    
+                    last_stat_time = current_time
 
         except Exception as e:
             logger.error(f"VR streaming error: {e}\n{traceback.format_exc()}")
         finally:
-            logger.info("VR stream video ended")
+            logger.info(f"VR JPEG stream ended. Frames sent: {frames_sent}")
             await self._cleanup()
+
 
     async def _send_error(self, message):
         '''
@@ -345,9 +347,9 @@ class StreamingConsumer(AsyncWebsocketConsumer):
             except asyncio.CancelledError:
                 logger.info("VR stream task was cancelled")
 
-        if self.capture_thread and self.capture_thread.is_alive():
-            logger.info("Waiting for VR capture thread to finish")
-            self.capture_thread.join(timeout=2.0)
+                if self.capture_thread and self.capture_thread.is_alive():
+                    logger.info("Waiting for VR capture thread to finish")
+                    self.capture_thread.join(timeout=2.0)
             if self.capture_thread.is_alive():
                 logger.warning("VR capture thread did not finish within timeout")
 
@@ -394,6 +396,10 @@ class StreamingConsumer(AsyncWebsocketConsumer):
             return None
 
     async def receive(self, text_data=None, bytes_data=None):
+        '''
+        Handles messages received from the client.
+        Supports key exchange, quality control, pausing/resuming, gyroscope data, etc.
+        '''
         try:
             data = None
 
@@ -426,12 +432,6 @@ class StreamingConsumer(AsyncWebsocketConsumer):
 
             match msg_type:
                 case 'aes_key_exchange':
-                    '''
-                    Starts the VR stream by exchanging an AES key.
-                    The client sends an encrypted AES key and IV, which the server decrypts
-                    using its private RSA key. The decrypted AES key is then used to encrypt
-                    the video stream.
-                    '''
                     enc_key = base64.b64decode(data['encrypted_key'])
                     iv = base64.b64decode(data['iv'])
                     cipher = PKCS1_v1_5.new(self.priv_key)
@@ -467,17 +467,10 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                         await self._send_error("Failed to initialize VR process")
 
                 case 'pause':
-                    '''
-                    Just pauses the video stream. The VR process will be terminated. But the channel will remain open.
-                    The client can resume the stream later.
-                    '''
                     self.running = False
-                    await self.send(text_data=json.dumps({'type': 'status', 'message': 'VR stream paused!'}))
+                    await self.send(text_data=json.dumps({'type': 'status', 'message': 'VR stream paused'}))
 
                 case 'resume':
-                    '''
-                    Resumes the paused stream. The VR process will be restarted if it was terminated.
-                    '''
                     if not self.running:
                         logger.info("Resuming VR stream")
                         self.running = True
@@ -487,9 +480,6 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                         await self.send(text_data=json.dumps({'type': 'status', 'message': 'VR stream resumed'}))
 
                 case 'quality':
-                    '''
-                    Just adjusts the JPEG quality of the stream. Could probably be made dynamic based on the network conditions.
-                    '''
                     value = data.get('value')
                     if isinstance(value, int) and 1 <= value <= 100:
                         self.jpeg_quality = value
@@ -501,7 +491,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                     self.running = False
                     await self._send_error("VR stream terminated by client")
                     await self.close()
-                    
+
                 case 'gyro':
                     alpha = data.get('alpha')
                     beta = data.get('beta')
@@ -514,7 +504,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                         'timestamp': timestamp
                     })
                     logger.info(f"Gyroscope - α: {alpha:.2f}, β: {beta:.2f}, γ: {gamma:.2f}, t: {timestamp}")
-                    
+
                 case _:
                     await self._send_error("Unknown message type")
 
