@@ -20,6 +20,10 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
       }
       canvas {
+        width: 100%;
+        height: auto;
+        max-width: 100%;
+        max-height: 70vh;
         display: block;
         margin: 20px auto;
         background: black;
@@ -65,12 +69,13 @@
     <div class="container">
       <h1>Secure Video Stream</h1>
       <div id="status" class="status">Connecting...</div>
-      <canvas id="canvas" width="1280" height="720"></canvas>
+      <canvas id="canvas" width="1280" height="720" style="width: 100%; height: auto; max-width: 100%; max-height: 70vh; display: block; margin: 20px auto; background: black; border: 2px solid #555;"></canvas>
 
       <div class="controls">
         <button onclick="sendControl('pause')">Pause</button>
         <button onclick="sendControl('resume')">Resume</button>
         <button onclick="disconnect()">Disconnect</button>
+        <button id="fullscreenBtn" style="float:right;">Fullscreen</button>
       </div>
 
       <div class="quality-control">
@@ -370,9 +375,34 @@ function setupGyroListener() {
   );
 }
 
+const fullscreenBtn = document.getElementById("fullscreenBtn");
+fullscreenBtn.onclick = () => {
+  if (window.screen.orientation && window.screen.orientation.type.startsWith('landscape')) {
+    if (canvas.requestFullscreen) {
+      canvas.requestFullscreen();
+    } else if (canvas.webkitRequestFullscreen) {
+      canvas.webkitRequestFullscreen();
+    } else if (canvas.msRequestFullscreen) {
+      canvas.msRequestFullscreen();
+    }
+  } else {
+    alert('Rotate your device to landscape to enable fullscreen.');
+  }
+};
+
 window.onload = () => {
   connect();
   enableGyro();
+  // Optionally, auto-resize canvas to fit parent
+  function resizeCanvas() {
+    const container = document.querySelector('.container');
+    if (container) {
+      canvas.width = container.offsetWidth;
+      canvas.height = Math.round(container.offsetWidth * 9 / 16);
+    }
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
 };
 
 window.onbeforeunload = () => socket && socket.close();
