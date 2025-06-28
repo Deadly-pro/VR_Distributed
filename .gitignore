@@ -1,3 +1,17 @@
 *.venv
 *.pem
 *.vs
+*__pycache__
+*.pyc
+*.obj
+*.dat
+*.exe
+*.dll
+*.vcxproj
+*.suo
+*.pdb
+*.cache
+*.log
+*.tlog
+*.recipe
+*.ilk
