@@ -1,5 +1,22 @@
 *.venv
 *.pem
 *.vs
+<<<<<<< HEAD
 *.log
 *.dat
+=======
+*__pycache__
+*.pyc
+*.obj
+*.dat
+*.exe
+*.dll
+*.vcxproj
+*.suo
+*.pdb
+*.cache
+*.log
+*.tlog
+*.recipe
+*.ilk
+>>>>>>> e813a5e62690d1e7738ee026a0c9425ec366c2ce
