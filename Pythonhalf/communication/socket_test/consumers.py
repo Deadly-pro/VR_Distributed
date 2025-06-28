@@ -7,9 +7,11 @@ import time
 import traceback
 import os
 import platform
+import sys
 from threading import Thread, Event
 from queue import Queue
 import subprocess
+from . import Mediapipe as Mp
 import shlex
 import cv2
 import numpy as np
@@ -81,10 +83,13 @@ class StreamingConsumer(AsyncWebsocketConsumer):
         self.fps = 60
         
         # VR executable path - adjust as needed
-        self.vr_exe_path = os.path.join("..", "..", "test_main.py")  # Relative path from consumer location
+        self.vr_exe_path = os.path.join("..", "..", "main.exe")
+        vr_dir = os.path.abspath(os.path.join(self.vr_exe_path, ".."))
+        self.shm_path = os.path.join(vr_dir, "Shared", "hands.dat")
+        self.mediapipe=Mp.HandTracker(self.shm_path)
         # Alternative: use absolute path
         # self.vr_exe_path = r"L:\combined\VR_Distributed\cpp_src\x64\Debug\VRenv(raylib).exe"
-
+        #self.shm_path=r"L:\VR_Distributed\Shared\hands.dat"
         try:
             with open("server_public.pem", "rb") as f:
                 self.pub_key = RSA.import_key(f.read())
@@ -213,8 +218,8 @@ class StreamingConsumer(AsyncWebsocketConsumer):
         '''
         try:
             # Determine the actual executable path
-            if self.vr_exe_path.endswith('.py'):
-                # If it's a Python script, run it with Python
+            if self.vr_exe_path.endswith('.exe'):
+                # If it's a native script run directly
                 exe_path = os.path.join(os.path.dirname(self.vr_exe_path), "cpp_src", "x64", "Debug", "VRenv(raylib).exe")
             else:
                 exe_path = self.vr_exe_path
@@ -224,7 +229,6 @@ class StreamingConsumer(AsyncWebsocketConsumer):
             if not os.path.exists(exe_path):
                 logger.error(f"VR executable not found at {exe_path}")
                 return False
-            
             # Use larger buffers and disable buffering
             self.vr_process = subprocess.Popen(
                 [exe_path],
@@ -233,14 +237,20 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                 stdin=subprocess.PIPE,
                 bufsize=1024*1024  # 1MB buffer
             )
-            
             logger.info(f"VR subprocess started with PID: {self.vr_process.pid}")
-            
-            # Test if process started correctly
+            #Test if process started correctly
             if self.vr_process.poll() is not None:
                 logger.error("VR process terminated immediately")
                 return False
-            
+            # Mediapipe process seems to only work with proper perms in threads so no subprocess.Popen used :(
+            self.mediapipe_process = Thread(target=self.mediapipe.run, daemon=True)
+            self.mediapipe_process.start()
+            logger.info(f"Launching Mediapipe process..")
+            if self.mediapipe_process.is_alive():
+                logger.info("Mediapipe process started successfully")
+            else:
+                logger.error("Mediapipe process failed to start")
+                return False
             self.capture_ready.clear()
             self.running = True
             self.capture_thread = Thread(target=self.capture_frames_from_vr, daemon=True)
@@ -363,7 +373,13 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                 self.vr_process.kill()
                 self.vr_process.wait()
             self.vr_process = None
-
+        if self.mediapipe_process and self.mediapipe_process.is_alive():
+            logger.info("Terminating Mediapipe process")
+            self.mediapipe.cleanup()
+            self.mediapipe_process.join(timeout=2.0)
+            if self.mediapipe_process.is_alive():
+                logger.warning("Mediapipe process did not finish within timeout")
+            self.mediapipe_process = None
         while not self.frame_queue.empty():
             try:
                 self.frame_queue.get_nowait()
