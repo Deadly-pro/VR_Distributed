@@ -296,7 +296,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                 timestamp = time.time()
                 total_size = len(nonce) + len(ciphertext) + len(tag)
                 
-                # FIXED: Use the correct 16-byte header format that matches JavaScript expectations
+                # Use the correct 16-byte header format that matches JavaScript expectations
                 header = struct.pack("dII", 
                     timestamp,                    # 8 bytes - double: timestamp
                     self.sequence_number,         # 4 bytes - uint32: sequence
