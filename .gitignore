@@ -1,3 +1,5 @@
 *.venv
 *.pem
 *.vs
+*.log
+*.dat
