@@ -19,7 +19,7 @@
 
 // For JPEG encoding - you'll need to install libjpeg-turbo
 extern "C" {
-#include <turbojpeg.h>
+    #include <turbojpeg.h>
 }
 
 namespace fs = std::filesystem;
@@ -291,7 +291,7 @@ int main(void) {
         lastMousePos = mousePos;
         player.HandleMouseLook(delta);
 
-        // Keyboard input
+        // Keyboard input debug only (cannot be given from webapp)
         Vector3 move = { 0 };
         if (IsKeyDown(KEY_W)) move.z -= 1;
         if (IsKeyDown(KEY_S)) move.z += 1;

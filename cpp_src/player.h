@@ -40,6 +40,9 @@ public:
     void SetYawPitch(float newYaw, float newPitch);
 
 private:
+    float calibrationYaw = 0.0f;
+    float calibrationPitch = 0.0f;
+    bool isCalibrated = false; 
     Vector3 TransformMediaPipeToWorld(const Vector3& mediapipeCoords, const std::string& handedness, float estimated_depth = 0.5f, float hand_scale = 1.0f);
     Vector3 GetShoulderPosition(bool is_left_hand) const;
     float EstimateDepthFromScale(float hand_scale) const;

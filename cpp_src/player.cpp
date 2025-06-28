@@ -1,6 +1,13 @@
-#include "player.h"
+﻿#include "player.h"
 #include <cmath>
 #include <algorithm>
+
+float calibrationYaw = 0.0f;
+float calibrationPitch = 0.0f;
+bool isCalibrated = false;
+float yaw;
+float pitch;
+
 
 Player::Player() : position({ 0.0f, 1.7f, 5.0f }), target({ 0.0f, 1.7f, 0.0f }),
 up({ 0.0f, 1.0f, 0.0f }), yaw(0.0f), pitch(0.0f), sensitivity(0.002f) {
@@ -10,6 +17,7 @@ up({ 0.0f, 1.0f, 0.0f }), yaw(0.0f), pitch(0.0f), sensitivity(0.002f) {
     leftHand.landmarks.resize(21);
     rightHand.landmarks.resize(21);
     handPoints.resize(42); // 21 points per hand * 2 hands
+
 }
 
 void Player::Update(float deltaTime) {
@@ -263,6 +271,43 @@ Vector3 Player::Getup() const {
 }
 
 void Player::SetYawPitch(float newYaw, float newPitch) {
-    yaw = newYaw;
-    pitch = Clamp(newPitch, -PI / 2.0f + 0.1f, PI / 2.0f - 0.1f);
+    float transformedYaw, transformedPitch;
+
+    // Swap axes due to landscape orientation:
+    transformedYaw = newPitch;       // phone pitch → VR yaw
+    transformedPitch = -newYaw;      // phone yaw → VR pitch (invert for correct up/down)
+
+    // Apply calibration if user calibrated
+    if (isCalibrated) {
+        transformedYaw -= calibrationYaw;
+        transformedPitch -= calibrationPitch;
+    }
+
+    // Normalize yaw to [-PI, PI]
+    while (transformedYaw > PI) transformedYaw -= 2.0f * PI;
+    while (transformedYaw < -PI) transformedYaw += 2.0f * PI;
+
+    // Optional smoothing
+    const float smoothingFactor = 0.15f;
+    yaw = yaw * (1.0f - smoothingFactor) + transformedYaw * smoothingFactor;
+
+    float clampedPitch = Clamp(transformedPitch, -PI/2.0f + 0.2f, PI/2.0f - 0.2f);
+    pitch = pitch * (1.0f - smoothingFactor) + clampedPitch * smoothingFactor;
+
+    // Optional deadzone to reduce micro-drift
+    const float deadzone = 0.01f;
+    if (fabsf(transformedYaw) < deadzone) transformedYaw = 0.0f;
+    if (fabsf(transformedPitch) < deadzone) transformedPitch = 0.0f;
+}
+
+void CalibrateVROrientation() {
+    // Call this when user is looking straight forward to set baseline
+    calibrationYaw = yaw;
+    calibrationPitch = pitch;
+    isCalibrated = true;
+}
+
+void ResetVRDrift() {
+    // Call periodically or when user presses a button to combat gyro drift
+    CalibrateVROrientation();
 }
