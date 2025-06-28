@@ -168,7 +168,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                             self.frame_queue.put_nowait(frame_info)
                         except:
                             pass
-                    frame_count += 1
+                    '''frame_count += 1
                     current_time = time.time()
                     if current_time - last_stat_time >= 5.0:
                         elapsed = current_time - start_time
@@ -176,7 +176,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                         mbps = (bytes_received * 8 / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                         logger.info(f"VR Stats - Frames: {frame_count}, FPS: {fps:.1f}, "
                                     f"Data rate: {mbps:.2f} Mbps, Queue size: {self.frame_queue.qsize()}")
-                        last_stat_time = current_time
+                        last_stat_time = current_time'''
                 except Exception as e:
                     logger.error(f"Frame capture error: {e}")
                     break
@@ -313,20 +313,20 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                 bytes_sent += len(payload)
                 
                 # Log statistics every 5 seconds
-                current_time = time.time()
+                """current_time = time.time()
                 if current_time - last_stat_time >= 5.0:
                     elapsed = current_time - start_time
                     fps = frames_sent / elapsed if elapsed > 0 else 0
                     mbps = (bytes_sent * 8 / (1024 * 1024)) / elapsed if elapsed > 0 else 0
                     
-                    logger.info(f"Stream Stats - Sent: {frames_sent}, FPS: {fps:.1f}, "
+                    print(f"Stream Stats - Sent: {frames_sent}, FPS: {fps:.1f}, "
                             f"Bandwidth: {mbps:.2f} Mbps, Avg frame size: {bytes_sent/frames_sent if frames_sent > 0 else 0:.0f} bytes")
                     
                     # Optional: Log frame info for debugging
-                    logger.debug(f"Frame info - Width: {frame_info['width']}, Height: {frame_info['height']}, "
-                            f"Quality: {frame_info['quality']}, VR timestamp: {frame_info['timestamp_ms']}")
+                    '''print(f"Frame info - Width: {frame_info['width']}, Height: {frame_info['height']}, "
+                            f"Quality: {frame_info['quality']}, VR timestamp: {frame_info['timestamp_ms']}")'''
                     
-                    last_stat_time = current_time
+                    last_stat_time = current_time"""
 
         except Exception as e:
             logger.error(f"VR streaming error: {e}\n{traceback.format_exc()}")
@@ -519,7 +519,7 @@ class StreamingConsumer(AsyncWebsocketConsumer):
                         'gamma': gamma,
                         'timestamp': timestamp
                     })
-                    logger.info(f"Gyroscope - α: {alpha:.2f}, β: {beta:.2f}, γ: {gamma:.2f}, t: {timestamp}")
+                    #logger.info(f"Gyroscope - α: {alpha:.2f}, β: {beta:.2f}, γ: {gamma:.2f}, t: {timestamp}")
 
                 case _:
                     await self._send_error("Unknown message type")
