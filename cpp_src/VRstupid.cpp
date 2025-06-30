@@ -90,14 +90,26 @@ void VRDesktopRenderer::renderDesktopPanel(Vector3 panelPosition, Vector3 panelS
         {panelPosition.x - panelSize.x / 2, panelPosition.y - panelSize.y / 2, panelPosition.z}
     };
 
-    // Draw textured quad with optimized rendering
+    // Texture coordinates with flipping options
+    float texCoords[8];
+
+    // Standard texture coordinates (mirrored flipping)
+     texCoords[0] = 0.0f; texCoords[1] = 0.0f; // Top-left
+     texCoords[2] = 1.0f; texCoords[3] = 0.0f; // Top-right
+     texCoords[4] = 1.0f; texCoords[5] = 1.0f; // Bottom-right
+     texCoords[6] = 0.0f; texCoords[7] = 1.0f; // Bottom-left
+
     rlSetTexture(desktopTexture.id);
     rlBegin(RL_QUADS);
     rlColor4ub(255, 255, 255, 255);
-    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(corners[0].x, corners[0].y, corners[0].z);
-    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(corners[1].x, corners[1].y, corners[1].z);
-    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(corners[2].x, corners[2].y, corners[2].z);
-    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(corners[3].x, corners[3].y, corners[3].z);
+
+
+    // Flipped horizontally by swapping U coordinates (1.0 <-> 0.0)
+    rlTexCoord2f(1.0f, 0.0f); rlVertex3f(corners[0].x, corners[0].y, corners[0].z); // Top-left uses right texture
+    rlTexCoord2f(0.0f, 0.0f); rlVertex3f(corners[1].x, corners[1].y, corners[1].z); // Top-right uses left texture
+    rlTexCoord2f(0.0f, 1.0f); rlVertex3f(corners[2].x, corners[2].y, corners[2].z); // Bottom-right uses left texture
+    rlTexCoord2f(1.0f, 1.0f); rlVertex3f(corners[3].x, corners[3].y, corners[3].z); // Bottom-left uses right texture
+
     rlEnd();
     rlSetTexture(0);
 }

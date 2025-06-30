@@ -166,7 +166,7 @@ class WebRTCStreamingConsumer(AsyncWebsocketConsumer):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.PIPE,
-                bufsize=1024*1024
+                bufsize=1024*1024<<2
             )
             
             logger.info(f"VR subprocess started with PID: {self.vr_process.pid}")

@@ -1,16 +1,8 @@
-﻿  hands.cpp
-  vr_main.cpp
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(142,81): warning C4244: 'return': conversion from '_Rep' to 'uint32_t', possible loss of data
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(142,81): warning C4244:         with
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(142,81): warning C4244:         [
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(142,81): warning C4244:             _Rep=__int64
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(142,81): warning C4244:         ]
-  player.cpp
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\player.cpp(23,27): warning C4100: 'deltaTime': unreferenced parameter
-  screen_capture.cpp
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\screen_capture.cpp(115,15): warning C4189: 'error': local variable is initialized but not referenced
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\screen_capture.cpp(129,15): warning C4189: 'error': local variable is initialized but not referenced
-  VRstupid.cpp
-  Generating Code...
-LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
+﻿  vr_main.cpp
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(203,34): warning C4101: 'e': unreferenced local variable
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(214,94): warning C4244: 'return': conversion from '_Rep' to 'uint32_t', possible loss of data
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(214,94): warning C4244:         with
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(214,94): warning C4244:         [
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(214,94): warning C4244:             _Rep=__int64
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(214,94): warning C4244:         ]
   VRenv(raylib).vcxproj -> C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\x64\Debug\VRenv(raylib).exe
