@@ -29,8 +29,9 @@ public:
     void Update();
     void HandleMouseLook(Vector2 mouseDelta);
     void Move(Vector3 direction, float deltaTime);
+    void SetYawPitchRoll(float newYaw, float newPitch, float newRoll);
 
-    // Enhanced holistic methods
+    // Hand methods
     void DrawHolisticHands(const std::vector<HolisticHandData>& holisticData);
     void DrawHands(const std::vector<std::pair<std::string, std::vector<Vector3>>>& handData);
 
@@ -40,13 +41,9 @@ public:
     Vector3 GetRight() const;
     Vector3 GetPosition() const;
     Vector3 Getup() const;
-
-    void SetYawPitch(float newYaw, float newPitch);
-    void SetYawPitchRoll(float newYaw, float newPitch, float newRoll);
-    void Calibrate();
-    void ResetVRDrift();
-
 private:
+
+    // Calibration variables
     float calibrationYaw;
     float calibrationPitch;
     float calibrationRoll;

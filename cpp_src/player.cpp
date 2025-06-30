@@ -17,12 +17,38 @@ up({ 0.0f, 1.0f, 0.0f }), yaw(0.0f), pitch(0.0f), roll(0.0f), sensitivity(0.002f
     rightHand.landmarks.resize(21);
     handPoints.resize(42);
 }
-
 void Player::Update() {
-    target.x = position.x + cosf(pitch) * sinf(yaw);
-    target.y = position.y + sinf(pitch);
-    target.z = position.z + cosf(pitch) * cosf(yaw);
+    // Direct calculation using phone orientation
+    // Based on search results: use target and up vectors
+
+    float cosYaw = cosf(yaw);
+    float sinYaw = sinf(yaw);
+    float cosPitch = cosf(pitch);
+    float sinPitch = sinf(pitch);
+    float cosRoll = cosf(roll);
+    float sinRoll = sinf(roll);
+
+    // Calculate forward direction (where camera looks)
+    Vector3 forward = {
+        cosPitch * sinYaw,
+        sinPitch,
+        cosPitch * cosYaw
+    };
+    forward = Vector3Normalize(forward);
+
+    // Calculate up vector with roll applied
+    Vector3 baseUp = { 0.0f, 1.0f, 0.0f };
+    up = {
+        sinRoll,
+        cosRoll,
+        0.0f
+    };
+    up = Vector3Normalize(up);
+
+    // Set target based on forward direction
+    target = Vector3Add(position, forward);
 }
+
 
 void Player::HandleMouseLook(Vector2 mouseDelta) {
     yaw += mouseDelta.x * sensitivity;
@@ -43,42 +69,24 @@ void Player::Move(Vector3 direction, float deltaTime) {
     position = Vector3Add(position, movement);
 }
 Vector3 Player::TransformHolisticToVR(const Vector3& holisticCoords, const std::string& handedness, float depth_scale) {
-    // Proper coordinate transformation for natural hand mapping
-    float vr_x = holisticCoords.x;       // Keep X as-is
-    float vr_y = holisticCoords.y; // Flip Y for proper orientation
+    // Completely static world positioning
+    float vr_x = holisticCoords.x;
+    float vr_y = 1.0f - holisticCoords.y;
     float vr_z = holisticCoords.z;
 
-    // Mirror hands for natural VR experience (like looking in a mirror)
+    // Mirror for natural interaction
     if (handedness == "Right") {
-        vr_x = 1.0f - vr_x; // Mirror right hand
+        vr_x = 1.0f - vr_x;
     }
 
-    // Scale and position relative to player
-    float scale = 1.0f * depth_scale;
-
-    // Get player vectors
-    Vector3 forward = GetForward();
-    Vector3 right = GetRight();
-    Vector3 up_vec = Getup();
-
-    // Position hands naturally in front of player
-    Vector3 hand_center = Vector3Add(position, Vector3Scale(forward, 1.2f)); // 1.2m in front
-    hand_center.y = position.y - 0.2f; // Slightly below eye level
-
-    // Transform coordinates
-    Vector3 hand_offset = {
-        (vr_x - 0.5f) * 1.0f,  // Horizontal spread (1m total width)
-        (vr_y - 0.5f) * 0.8f,  // Vertical range (80cm)
-        vr_z * 0.3f            // Depth variation (30cm)
+    // Fixed world coordinates (no player position dependency)
+    Vector3 static_position = {
+        (vr_x - 0.5f) * 1.5f,      // X: -0.75m to +0.75m from world origin
+        1.5f + (vr_y - 0.5f) * 0.6f, // Y: 1.2m to 1.8m height (chest area)
+        1.5f + vr_z * 0.3f         // Z: 1.5m to 1.8m from world origin
     };
 
-    // Apply offset relative to player orientation
-    Vector3 vr_position = Vector3Add(hand_center, Vector3Add(Vector3Add(
-        Vector3Scale(right, hand_offset.x),
-        Vector3Scale(up_vec, hand_offset.y)),
-        Vector3Scale(forward, hand_offset.z)));
-
-    return vr_position;
+    return static_position;
 }
 
 void Player::UpdateHolisticHand(VRHand& hand, const HolisticHandData& holistic_data) {
@@ -197,7 +205,7 @@ Camera Player::GetLeftEyeCamera(float eyeSeparation) const {
     camera.position = Vector3Add(position, Vector3Scale(right, -eyeSeparation / 2.0f));
     camera.target = Vector3Add(target, Vector3Scale(right, -eyeSeparation / 2.0f));
     camera.up = up;
-    camera.fovy = 90.0f;
+    camera.fovy = 60.0f;
     camera.projection = CAMERA_PERSPECTIVE;
     return camera;
 }
@@ -208,7 +216,7 @@ Camera Player::GetRightEyeCamera(float eyeSeparation) const {
     camera.position = Vector3Add(position, Vector3Scale(right, eyeSeparation / 2.0f));
     camera.target = Vector3Add(target, Vector3Scale(right, eyeSeparation / 2.0f));
     camera.up = up;
-    camera.fovy = 90.0f;
+    camera.fovy = 60.0f;
     camera.projection = CAMERA_PERSPECTIVE;
     return camera;
 }
@@ -228,45 +236,26 @@ Vector3 Player::GetPosition() const {
 Vector3 Player::Getup() const {
     return Vector3Normalize(Vector3CrossProduct(GetRight(), GetForward()));
 }
-void Player::SetYawPitchRoll(float newYaw, float newPitch, float newRoll) {
-    // Device orientation to VR coordinate transformation
-    float transformedYaw = -newYaw;      // Invert yaw for natural movement
-    float transformedPitch = newPitch;   // Keep pitch as-is
-    float transformedRoll = newRoll;     // Keep roll as-is
 
-    // Apply calibration
+void Player::SetYawPitchRoll(float newYaw, float newPitch, float newRoll) {
+    yaw = newYaw;
+    pitch = -newPitch;  // Invert pitch for natural VR feel
+    roll = newRoll;
+
+    // Apply calibration if needed
     if (isCalibrated) {
-        transformedYaw -= calibrationYaw;
-        transformedPitch -= calibrationPitch;
-        transformedRoll -= calibrationRoll;
+        yaw -= calibrationYaw;
+        pitch -= calibrationPitch;
+        roll -= calibrationRoll;
     }
 
-    // Normalize yaw
-    while (transformedYaw > PI) transformedYaw -= 2.0f * PI;
-    while (transformedYaw < -PI) transformedYaw += 2.0f * PI;
+    // Simple normalization
+    while (yaw > 2.0f * PI) yaw -= 2.0f * PI;
+    while (yaw < 0.0f) yaw += 2.0f * PI;
 
-    // Increased responsiveness for VR
-    const float smoothingFactor = 0.6f; // More responsive
-    yaw = yaw * (1.0f - smoothingFactor) + transformedYaw * smoothingFactor;
+    // Convert yaw to [-π, π] range
+    if (yaw > PI) yaw -= 2.0f * PI;
 
-    // Proper pitch limits for VR comfort
-    float clampedPitch = Clamp(transformedPitch, -PI / 2.5f, PI / 2.5f);
-    pitch = pitch * (1.0f - smoothingFactor) + clampedPitch * smoothingFactor;
-
-    roll = roll * (1.0f - smoothingFactor) + transformedRoll * smoothingFactor;
-}
-
-void Player::SetYawPitch(float newYaw, float newPitch) {
-    SetYawPitchRoll(newYaw, newPitch, 0.0f);
-}
-
-void Player::Calibrate() {
-    calibrationYaw = yaw;
-    calibrationPitch = pitch;
-    calibrationRoll = roll;
-    isCalibrated = true;
-}
-
-void Player::ResetVRDrift() {
-    Calibrate();
+    // Clamp pitch for comfort
+    pitch = Clamp(pitch, -PI / 2.0f, PI / 2.0f);
 }

@@ -1,4 +1,4 @@
-#include "raylib.h"
+﻿#include "raylib.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include "player.h"
@@ -31,6 +31,8 @@ struct FrameData {
     uint32_t height;
     uint32_t pixel_format;
 };
+
+// Remove the duplicate GyroData struct definition here
 
 std::vector<HolisticHandData> ReadHolisticHandData(const std::string& filename);
 bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& roll);
@@ -83,7 +85,6 @@ int main(void) {
         Vector2 delta = { mousePos.x - lastMousePos.x, mousePos.y - lastMousePos.y };
         lastMousePos = mousePos;
         player.HandleMouseLook(delta);
-
         float yaw, pitch, roll;
         if (ReadGyroData(gyroFilePath, yaw, pitch, roll)) {
             player.SetYawPitchRoll(yaw, pitch, roll);
@@ -190,13 +191,16 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& 
         nlohmann::json j;
         file >> j;
 
-        float alpha = j.value("alpha", 0.0f);
-        float beta = j.value("beta", 0.0f);
-        float gamma = j.value("gamma", 0.0f);
-
+        // Direct mapping - treat as absolute orientation angles, not velocities
+        float alpha = j.value("alpha", 0.0f);   // Compass heading (0-360°)
+        float beta = j.value("beta", 0.0f);     // Pitch (-180° to 180°)
+		float gamma = j.value("gamma", 0.0f);   // Roll deals with up /down tilt (-90° to 90°)
+		gamma += 45.0f; // dont ask why tf this works but it does
+		//gamma = Clamp(beta, -90.0f, 90.0f); // Ensure beta is within valid range
+        // Convert to radians and map directly
         yaw = DEG2RAD * alpha;
-        pitch = DEG2RAD * (-beta);
-        roll = DEG2RAD * (gamma);
+        pitch = DEG2RAD * (gamma);
+        roll = DEG2RAD * (-beta);
 
         return true;
     }
@@ -204,6 +208,8 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& 
         return false;
     }
 }
+
+
 
 bool isStdoutPiped() {
     return !_isatty(_fileno(stdout));
