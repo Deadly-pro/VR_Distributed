@@ -5,9 +5,10 @@ import os
 class SharedMemoryHandler:
     def __init__(self, shm_path, shm_size):
         #print("test")
-        base_path = pathlib.Path("__file__") / "../../../Shared"
-        #print(base_path)
-        self.shm_path = base_path/shm_path
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        resolved_path = os.path.abspath(os.path.join(base_dir, "..", "..", "..", "Shared", shm_path))
+
+        self.shm_path = resolved_path
         self.shm_size = shm_size
  
         # Create file-backed memory map

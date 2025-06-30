@@ -154,24 +154,30 @@ LOGGING = {
 
     'root': {
         'handlers': ['console'],
-        'level': 'WARNING',  # Or ERROR
+        'level': 'INFO',  # Or ERROR
     },
 
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'WARNING',
+            'level': 'INFO',
         },
         'channels': {
             'handlers': ['console'],
-            'level': 'WARNING',
-            'propagate': False,
+            'level': 'INFO',
+            'propagate': True,
         },
         'daphne': {
             'handlers': ['console'],
             'level': 'WARNING',
-            'propagate': False,
+            'propagate': True,
         },
+    },
+}
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
     },
 }
 

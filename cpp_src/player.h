@@ -26,7 +26,7 @@ struct VRHand {
 class Player {
 public:
     Player();
-    void Update(float deltaTime);
+    void Update();
     void HandleMouseLook(Vector2 mouseDelta);
     void Move(Vector3 direction, float deltaTime);
     void DrawHands(const std::vector<std::pair<std::string, std::vector<Vector3>>>& handData);
