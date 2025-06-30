@@ -1,12 +1,11 @@
-﻿  player.cpp
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\player.cpp(71,107): warning C4100: 'depth_scale': unreferenced parameter
-  vr_main.cpp
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(207,34): warning C4101: 'e': unreferenced local variable
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(220,94): warning C4244: 'return': conversion from '_Rep' to 'uint32_t', possible loss of data
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(220,94): warning C4244:         with
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(220,94): warning C4244:         [
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(220,94): warning C4244:             _Rep=__int64
-C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(220,94): warning C4244:         ]
+﻿  vr_main.cpp
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(265,34): warning C4101: 'e': unreferenced local variable
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(276,94): warning C4244: 'return': conversion from '_Rep' to 'uint32_t', possible loss of data
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(276,94): warning C4244:         with
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(276,94): warning C4244:         [
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(276,94): warning C4244:             _Rep=__int64
+C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\vr_main.cpp(276,94): warning C4244:         ]
+  windows_input.cpp
   Generating Code...
 LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
   VRenv(raylib).vcxproj -> C:\Users\yoy91\OneDrive\Documents\Projects\VRenv\VR_Distributed\cpp_src\x64\Debug\VRenv(raylib).exe

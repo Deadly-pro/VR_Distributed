@@ -130,21 +130,27 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="gesture_recognition.cpp" />
     <ClCompile Include="hands.cpp" />
     <ClCompile Include="vr_main.cpp" />
     <ClCompile Include="player.cpp" />
     <ClCompile Include="screen_capture.cpp" />
     <ClCompile Include="VRstupid.cpp" />
+    <ClCompile Include="vr_mouse.cpp" />
+    <ClCompile Include="windows_input.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gesture_recognition.h" />
     <ClInclude Include="holistic_data.h" />
     <ClInclude Include="player.h" />
     <ClInclude Include="screen_capture.h" />
     <ClInclude Include="thread_safe_queue.h" />
     <ClInclude Include="vr_desktop_render.h" />
+    <ClInclude Include="vr_mouse.h" />
+    <ClInclude Include="windows_input.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

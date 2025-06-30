@@ -20,6 +20,12 @@
 
 namespace fs = std::filesystem;
 
+// Define missing functions
+template<typename T>
+T Clamp(T value, T minVal, T maxVal) {
+    return (value < minVal) ? minVal : (value > maxVal) ? maxVal : value;
+}
+
 static boost::interprocess::mapped_region* handRegion = nullptr;
 static std::unique_ptr<boost::interprocess::file_mapping> handFile;
 
@@ -32,8 +38,7 @@ struct FrameData {
     uint32_t pixel_format;
 };
 
-// Remove the duplicate GyroData struct definition here
-
+// Function declarations
 std::vector<HolisticHandData> ReadHolisticHandData(const std::string& filename);
 bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& roll);
 bool isStdoutPiped();
@@ -79,26 +84,74 @@ int main(void) {
     std::string handFilePath = (sharedDir / "hands.dat").string();
     std::string gyroFilePath = (sharedDir / "gyro.dat").string();
 
+    debugLog << "[INFO] Hand file path: " << handFilePath << std::endl;
+    debugLog << "[INFO] Gyro file path: " << gyroFilePath << std::endl;
+
     while (!WindowShouldClose()) {
         Vector2 mousePos = GetMousePosition();
         if (firstMouse) { lastMousePos = mousePos; firstMouse = false; }
         Vector2 delta = { mousePos.x - lastMousePos.x, mousePos.y - lastMousePos.y };
         lastMousePos = mousePos;
         player.HandleMouseLook(delta);
+
+        // Read gyro data with all three axes
         float yaw, pitch, roll;
         if (ReadGyroData(gyroFilePath, yaw, pitch, roll)) {
             player.SetYawPitchRoll(yaw, pitch, roll);
         }
 
+        // Read enhanced holistic hand data
         auto holisticHandData = ReadHolisticHandData(handFilePath);
 
         player.Update();
         desktopRenderer.update();
 
+        // Set panel info for VR interactions
+        player.SetPanelInfo(panelPosition, panelSize);
+
         BeginTextureMode(target);
         ClearBackground(BLACK);
 
-        // Left eye
+        // VR mouse data handling with gesture-based clicks
+        Vector2 vrMouseUV;
+        bool vrLeftClick, vrRightClick, vrIsDragging;
+        if (player.GetVRMouseData(vrMouseUV, vrLeftClick, vrRightClick, vrIsDragging)) {
+            // Handle left click (scissors gesture: index + middle fingers)
+            if (vrLeftClick) {
+                std::ofstream debug("vr_interaction.log", std::ios::app);
+                debug << "VR LEFT CLICK (Scissors) at: " << vrMouseUV.x << ", " << vrMouseUV.y << std::endl;
+
+                // Convert UV to screen coordinates for desktop interaction
+                int screenX = (int)(vrMouseUV.x * 1920);
+                int screenY = (int)(vrMouseUV.y * 1080);
+
+                // Send left click to desktop renderer
+                desktopRenderer.sendLeftClick(screenX, screenY);
+
+                debugLog << "[VR] Left click at screen coords: " << screenX << ", " << screenY << std::endl;
+            }
+
+            // Handle right click (pinch gesture: thumb + index finger)
+            if (vrRightClick) {
+                std::ofstream debug("vr_interaction.log", std::ios::app);
+                debug << "VR RIGHT CLICK (Pinch) at: " << vrMouseUV.x << ", " << vrMouseUV.y << std::endl;
+
+                // Convert UV to screen coordinates
+                int screenX = (int)(vrMouseUV.x * 1920);
+                int screenY = (int)(vrMouseUV.y * 1080);
+
+                // Send right click to desktop renderer
+                desktopRenderer.sendRightClick(screenX, screenY);
+
+                debugLog << "[VR] Right click at screen coords: " << screenX << ", " << screenY << std::endl;
+            }
+            // Always send mouse position for cursor movement
+            int screenX = (int)(vrMouseUV.x * 1920);
+            int screenY = (int)(vrMouseUV.y * 1080);
+            desktopRenderer.sendMousePosition(screenX, screenY);
+        }
+
+        // Left eye viewport
         rlViewport(0, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetLeftEyeCamera(eyeSeparation));
         DrawGrid(20, 1.0f);
@@ -107,9 +160,10 @@ int main(void) {
         DrawCube({ -3, 0.5f, 0 }, 1, 1, 1, BLUE);
         desktopRenderer.renderDesktopPanel(panelPosition, panelSize);
         player.DrawHolisticHands(holisticHandData);
+        player.DrawLaserPointer(); // Laser pointer
         EndMode3D();
 
-        // Right eye
+        // Right eye viewport
         rlViewport(screenWidth / 2, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetRightEyeCamera(eyeSeparation));
         DrawGrid(20, 1.0f);
@@ -118,6 +172,7 @@ int main(void) {
         DrawCube({ -3, 0.5f, 0 }, 1, 1, 1, BLUE);
         desktopRenderer.renderDesktopPanel(panelPosition, panelSize);
         player.DrawHolisticHands(holisticHandData);
+        player.DrawLaserPointer(); // Laser pointer for right eye
         EndMode3D();
 
         rlViewport(0, 0, screenWidth, screenHeight);
@@ -131,12 +186,14 @@ int main(void) {
         UnloadImage(frame);
     }
 
+
     desktopRenderer.cleanup();
     UnloadRenderTexture(target);
     CloseWindow();
     return 0;
 }
 
+// Function implementations
 std::vector<HolisticHandData> ReadHolisticHandData(const std::string& filename) {
     namespace bip = boost::interprocess;
     std::vector<HolisticHandData> handData;
@@ -191,15 +248,16 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& 
         nlohmann::json j;
         file >> j;
 
-        // Direct mapping - treat as absolute orientation angles, not velocities
+        // Your working gyro mapping
         float alpha = j.value("alpha", 0.0f);   // Compass heading (0-360°)
         float beta = j.value("beta", 0.0f);     // Pitch (-180° to 180°)
-		float gamma = j.value("gamma", 0.0f);   // Roll deals with up /down tilt (-90° to 90°)
-		gamma += 45.0f; // dont ask why tf this works but it does
-		//gamma = Clamp(beta, -90.0f, 90.0f); // Ensure beta is within valid range
+        float gamma = j.value("gamma", 0.0f);   // Roll (-90° to 90°)
+
+        gamma += 45.0f; // Your working adjustment
+
         // Convert to radians and map directly
         yaw = DEG2RAD * alpha;
-        pitch = DEG2RAD * (gamma);
+        pitch = DEG2RAD * gamma;
         roll = DEG2RAD * (-beta);
 
         return true;
@@ -208,8 +266,6 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& 
         return false;
     }
 }
-
-
 
 bool isStdoutPiped() {
     return !_isatty(_fileno(stdout));

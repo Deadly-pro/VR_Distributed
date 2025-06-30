@@ -30,6 +30,15 @@
     <ClCompile Include="player.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="gesture_recognition.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="vr_mouse.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="windows_input.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -48,6 +57,15 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="holistic_data.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gesture_recognition.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vr_mouse.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="windows_input.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
