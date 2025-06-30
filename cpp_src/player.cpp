@@ -20,7 +20,7 @@ up({ 0.0f, 1.0f, 0.0f }), yaw(0.0f), pitch(0.0f), sensitivity(0.002f) {
 
 }
 
-void Player::Update(float deltaTime) {
+void Player::Update() {
     // Update target based on yaw and pitch
     target.x = position.x + cosf(pitch) * sinf(yaw);
     target.y = position.y + sinf(pitch);
