@@ -5,6 +5,7 @@ import time
 import numpy as np
 import cv2
 import av
+from av import VideoFrame
 
 from aiortc import VideoStreamTrack
 
@@ -32,10 +33,18 @@ class FrameHeader:
             0 < self.height <= 4000
         )
 
+    @staticmethod
+    def size():
+        return HEADER_SIZE
+
+    @staticmethod
+    def from_bytes(data: bytes):
+        return FrameHeader(data)
+
 class VRStreamTrack(VideoStreamTrack):
     kind = "video"
 
-    def __init__(self, stdout_pipe):
+    def __init__(self, stdout_pipe, vr_debugging=False):
         super().__init__()
         self.stream = stdout_pipe
         self._frame_count = 0
@@ -44,6 +53,11 @@ class VRStreamTrack(VideoStreamTrack):
         self._shm_frame_count = 0
         self._shm_last_log_time = self._start_time
         self._last_timestamp = None  # For duplicate filtering
+        self.vr_debugging = vr_debugging
+        self._debug_window_name = "VR Debug View"
+        if self.vr_debugging:
+            cv2.namedWindow(self._debug_window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(self._debug_window_name, 800, 600)  # Reasonable default size
 
     def sync_and_read_frame_header(self):
         buffer = b''
@@ -77,33 +91,99 @@ class VRStreamTrack(VideoStreamTrack):
                     buffer = buffer[-3:]
 
     async def recv(self):
-        pts, time_base = await self.next_timestamp()
-        header = self.sync_and_read_frame_header()
+        try:
+            frame = None
+            pts, time_base = await self.next_timestamp()
 
-        if not header or not header.is_valid:
-            logger.warning("Invalid or missing frame header")
-            await asyncio.sleep(0.01)
-            return await self.recv()
+            # Try to read frame from shared memory
+            if hasattr(self, 'frame_reader') and self.frame_reader:
+                frame_data = self.frame_reader.read_frame()
+                if frame_data is not None:
+                    frame = frame_data
+                    self._shm_frame_count += 1
+                    current_time = time.time()
+                    if current_time - self._shm_last_log_time >= 1.0:
+                        fps = self._shm_frame_count / (current_time - self._shm_last_log_time)
+                        print(f"Shared Memory FPS: {fps:.2f}")
+                        self._shm_frame_count = 0
+                        self._shm_last_log_time = current_time
 
-        raw_data = self.stream.read(header.frame_size)
-        if not raw_data or len(raw_data) != header.frame_size:
-            logger.warning(f"Expected {header.frame_size} bytes, got {len(raw_data) if raw_data else 0}")
-            await asyncio.sleep(0.01)
-            return await self.recv()
+            # If frame is not None and debugging is enabled, display it
+            if frame is not None and self.vr_debugging:
+                try:
+                    # Convert BGR to RGB for display
+                    display_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    cv2.imshow(self._debug_window_name, display_frame)
+                    cv2.waitKey(1)  # Allow window to update, but don't block
+                except Exception as e:
+                    print(f"Error displaying debug frame: {e}")
 
-        arr = np.frombuffer(raw_data, np.uint8).reshape((header.height, header.width, 4))
-        img = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+            if frame is not None:
+                # Convert to VideoFrame and return
+                video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
+                video_frame.pts = pts
+                video_frame.time_base = time_base
+                return video_frame
 
-        self._frame_count += 1
-        now = time.time()
-        if now - self._last_log_time >= 5.0:
-            elapsed = now - self._last_log_time
-            fps = self._frame_count / elapsed
-            logger.info(f"[VRStreamTrack] Streaming FPS: {fps:.2f} ({self._frame_count} frames in {elapsed:.1f}s)")
-            self._frame_count = 0
-            self._last_log_time = now
+            # Fallback to reading from pipe if shared memory read failed
+            while True:
+                header_data = self.stream.read(FrameHeader.size())
+                if not header_data:
+                    break
+                
+                header = FrameHeader.from_bytes(header_data)
+                
+                if header.frame_size == 0:
+                    continue
+                
+                frame_data = self.stream.read(header.frame_size)
+                if not frame_data:
+                    break
 
-        frame = av.VideoFrame.from_ndarray(img, format="bgr24")
-        frame.pts = pts
-        frame.time_base = time_base
-        return frame
+                # Skip duplicate frames
+                if self._last_timestamp is not None and header.timestamp_ms == self._last_timestamp:
+                    continue
+                self._last_timestamp = header.timestamp_ms
+                
+                # Update frame count and calculate FPS
+                self._frame_count += 1
+                current_time = time.time()
+                if current_time - self._last_log_time >= 1.0:
+                    fps = self._frame_count / (current_time - self._last_log_time)
+                    print(f"Pipe FPS: {fps:.2f}")
+                    self._frame_count = 0
+                    self._last_log_time = current_time
+
+                try:
+                    # Convert bytes to numpy array
+                    frame = np.frombuffer(frame_data, dtype=np.uint8)
+                    frame = frame.reshape((header.height, header.width, 4))
+                    frame = frame[:, :, :3]  # Convert RGBA to RGB
+                    
+                    # If debugging is enabled, display the frame
+                    if self.vr_debugging:
+                        try:
+                            cv2.imshow(self._debug_window_name, frame)
+                            cv2.waitKey(1)  # Allow window to update, but don't block
+                        except Exception as e:
+                            print(f"Error displaying debug frame: {e}")
+
+                    # Convert to VideoFrame and return
+                    video_frame = VideoFrame.from_ndarray(frame, format="bgr24")
+                    video_frame.pts = pts
+                    video_frame.time_base = time_base
+                    return video_frame
+                except Exception as e:
+                    print(f"Error processing frame: {e}")
+                    continue
+
+            # If we get here, the stream is closed
+            raise ConnectionError("Stream closed")
+            
+        except Exception as e:
+            print(f"Error in recv: {e}")
+            raise
+
+    def __del__(self):
+        if self.vr_debugging:
+            cv2.destroyWindow(self._debug_window_name)

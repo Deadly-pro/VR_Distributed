@@ -92,6 +92,7 @@
         <button onclick="sendControl('resume')">Resume</button>
         <button onclick="disconnect()">Disconnect</button>
         <button id="fullscreenBtn" style="float:right;">Fullscreen</button>
+        <button id="vrDebugBtn" style="float:right; margin-right: 10px; background: #28a745;">VR Debugging: OFF</button>
       </div>
 
       <div class="quality-control">
@@ -121,6 +122,8 @@ const qualityValue = document.getElementById("qualityValue");
 const startVrBtn = document.getElementById("startVrBtn");
 const peerListDiv = document.getElementById("peerList");
 const peerItemsDiv = document.getElementById("peerItems");
+const vrDebugBtn = document.getElementById("vrDebugBtn");
+let vrDebugging = false;
 
 let socket,
   aesKey,
@@ -471,6 +474,12 @@ async function handleMessage(msg) {
       await handleIceCandidate(msg.candidate, msg.from);
       break;
     
+    case "vr_debugging_status":
+      vrDebugging = msg.enabled;
+      vrDebugBtn.textContent = `VR Debugging: ${vrDebugging ? 'ON' : 'OFF'}`;
+      vrDebugBtn.style.background = vrDebugging ? '#ffc107' : '#28a745';
+      break;
+    
     default:
       console.warn("Unknown message type:", msg.type);
       break;
@@ -703,6 +712,14 @@ window.onload = async () => {
 
 window.onbeforeunload = () => {
   disconnect();
+};
+
+vrDebugBtn.onclick = function() {
+  vrDebugging = !vrDebugging;
+  sendEncryptedMessage({ type: "toggle_vr_debugging", enabled: vrDebugging });
+  vrDebugBtn.textContent = `VR Debugging: ${vrDebugging ? 'ON' : 'OFF'}`;
+  vrDebugBtn.style.background = vrDebugging ? '#ffc107' : '#28a745';
+  updateStatus(`VR Debugging ${vrDebugging ? 'enabled' : 'disabled'}.`, "connected");
 };
     </script>
   </body>

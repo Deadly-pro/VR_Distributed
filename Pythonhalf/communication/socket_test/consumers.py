@@ -44,6 +44,7 @@ class WebRTCStreamingConsumer(AsyncWebsocketConsumer):
         self.frame_width = 1920
         self.frame_height = 1080
         self.fps = 60
+        self.vr_debugging = False  # <--- Add this line
         self.pc: Optional[RTCPeerConnection] = None  # Add this line
         self.ice_candidate_queue = []
         self.early_ice_candidates = []
@@ -406,6 +407,20 @@ class WebRTCStreamingConsumer(AsyncWebsocketConsumer):
                     logger.info("Received ping from client")
                     await self.send(text_data=json.dumps({'type': 'pong'}))
 
+                case 'toggle_vr_debugging':
+                    enabled = data.get('enabled', False)
+                    self.vr_debugging = bool(enabled)
+                    # If a track is already running, update its flag if possible
+                    if self.pc:
+                        for sender in self.pc.getSenders():
+                            track = getattr(sender, 'track', None)
+                            if track and hasattr(track, 'vr_debugging'):
+                                track.vr_debugging = self.vr_debugging
+                    await self.send(text_data=json.dumps({
+                        'type': 'vr_debugging_status',
+                        'enabled': self.vr_debugging
+                    }))
+
                 case _:
                     await self._send_error("Unknown message type")
 
@@ -479,8 +494,7 @@ class WebRTCStreamingConsumer(AsyncWebsocketConsumer):
 
         self.pc = RTCPeerConnection(configuration=configuration)
         # Add the track BEFORE setting remote description
-        # track = DummyTrack()
-        track = VRStreamTrack(self.vr_process.stdout)
+        track = VRStreamTrack(self.vr_process.stdout, vr_debugging=self.vr_debugging)
         self.pc.addTrack(track)
         logger.info("DummyTrack added to PeerConnection before setRemoteDescription")
 
