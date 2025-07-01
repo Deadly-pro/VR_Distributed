@@ -53,14 +53,14 @@ int main(void) {
         debugLog << "[ERROR] Stdout is not piped. Exiting.\n";
         return 1;
     }
-
+    //resolution for rendering 
     const int screenWidth = 1920;
     const int screenHeight = 1080;
 
     SetTraceLogLevel(LOG_NONE);
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_HIDDEN);
     InitWindow(screenWidth, screenHeight, "VR Holistic Viewer");
-    SetTargetFPS(120);
+    //SetTargetFPS(120);
 
     FILE* nullout;
     freopen_s(&nullout, "NUL", "w", stderr);
@@ -76,8 +76,8 @@ int main(void) {
     const float eyeSeparation = 0.065f;
     Vector2 lastMousePos = { 0 };
     bool firstMouse = true;
-    Vector3 panelPosition = { 0.0f, 1.8f, 2.5f };
-    Vector3 panelSize = { 4.0f, 2.25f, 0.1f };
+    Vector3 panelPosition = { 0.0f, 1.8f, 4.0f };
+    Vector3 panelSize = { 17.60f, 5.0f, 0.1f };
 
     fs::path exePath = fs::absolute(fs::path(__argv[0]));
     fs::path sharedDir = exePath.parent_path().parent_path().parent_path().parent_path() / "Shared";
@@ -150,7 +150,7 @@ int main(void) {
             int screenY = (int)(vrMouseUV.y * 1080);
             desktopRenderer.sendMousePosition(screenX, screenY);
         }
-
+		float gap = 30.0f; // Gap between left and right eye viewports
         // Left eye viewport
         rlViewport(0, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetLeftEyeCamera(eyeSeparation));
@@ -164,7 +164,7 @@ int main(void) {
         EndMode3D();
 
         // Right eye viewport
-        rlViewport(screenWidth / 2, 0, screenWidth / 2, screenHeight);
+        rlViewport((screenWidth / 2)+gap, 0, screenWidth / 2, screenHeight);
         BeginMode3D(player.GetRightEyeCamera(eyeSeparation));
         DrawGrid(20, 1.0f);
         DrawCube({ 0, 0.5f, 0 }, 1, 1, 1, RED);
@@ -253,7 +253,7 @@ bool ReadGyroData(const std::string& filename, float& yaw, float& pitch, float& 
         float beta = j.value("beta", 0.0f);     // Pitch (-180° to 180°)
         float gamma = j.value("gamma", 0.0f);   // Roll (-90° to 90°)
 
-        gamma += 45.0f; // Your working adjustment
+        gamma += 80.0f; // Your working adjustment
 
         // Convert to radians and map directly
         yaw = DEG2RAD * alpha;

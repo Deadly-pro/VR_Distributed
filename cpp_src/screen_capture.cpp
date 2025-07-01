@@ -12,7 +12,7 @@ std::unique_ptr<std::thread> ScreenCapture::captureThread = nullptr;
 std::atomic<bool> ScreenCapture::shouldStop{ false };
 std::atomic<bool> ScreenCapture::isRunning{ false };
 ThreadSafeQueue<CapturedFrame> ScreenCapture::frameQueue;
-std::atomic<float> ScreenCapture::captureRate{ 1.0f / 30.0f };
+std::atomic<float> ScreenCapture::captureRate{ 1.0f / 120.0f };
 
 // Thread-local storage for Windows handles
 thread_local HDC screenDC = nullptr;

@@ -545,7 +545,7 @@ void Player::SetYawPitchRoll(float newYaw, float newPitch, float newRoll) {
 
     if (yaw > PI) yaw -= 2.0f * PI;
 
-    pitch = Clamp(pitch, -PI / 2.0f, PI / 2.0f);
+    pitch = Clamp(pitch, -PI / 1.0f, PI / 1.0f);
 }
 
 void Player::Calibrate() {
